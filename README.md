@@ -171,3 +171,5 @@ The code is the source of truth. These items in the slides and notes disagree wi
 | `test.js` | `node test.js` |
 | `tunnel.sh` | Public plain-HTTP URL for the relay |
 | `dossier/` | React hardware dossier (pinout lab, ADC lab, build tracker). `cd dossier && npm install && npm run dev` |
+#   o m n i k i t  
+ 
