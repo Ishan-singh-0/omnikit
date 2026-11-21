@@ -41,8 +41,25 @@
 
    ON-DEVICE FALL DETECTION (works with no network)
      The MPU-6050 is read every 40 ms. An impact above FALL_IMPACT_G followed by FALL_STILL_MS
-     without movement raises flag 64 and the alarm. Moving again clears it. A unit simply
-     dropped on a table looks the same, which is the known false-alarm case.
+     without movement starts a FALL_CANCEL_MS (10 s) WARNING: the speaker beeps every second and the
+     LCD says "FALL? PRESS BOOT". A tap on BOOT (or any movement) cancels it. If nobody cancels,
+     flag 64 is raised, the position is sent at once and texted. A unit simply dropped on a table
+     still looks like a fall, but the 10 s window lets the owner dismiss it.
+
+   BATTERY (optional): 1S Li-ion + 100k/100k divider -> GPIO33. Reported as "bat" (percent). Set BAT_FITTED 0 if absent.
+     BAT+ -> 100k -> GPIO33 -> 100k -> GND. Under 2.5 V at the pin the field is simply left out.
+
+   SMS ON SOS / FALL (needs only 2G signal and a SIM with SMS credit, not GPRS data)
+         sms +919876543210      add up to three numbers.   sms clear   sms test
+     On SOS or a confirmed fall the SIM800L texts "OMNIKIT SOS. lat,lon alt ... maps link" and repeats
+     every 10 minutes while it stands.
+
+   SIGNED PACKETS
+     Type  id <DEVICE_ID>  and  key <DEVICE_KEY>.  Packets then go to /ingest?id=<DEVICE_ID> with
+     "n" (a counter that only goes up: boot number << 20 | packet number) and "sig" = HMAC-SHA256 over
+     everything before it, keyed with the device key. The key never travels. Forged or replayed
+     packets are refused. Without  id  the old key-in-URL mode is used (and the relay stops
+     accepting it once a signed packet has been seen).
 
    NO RE-FLASH NEEDED TO CHANGE THE RELAY
      Open the Serial Monitor (115200, newline) and type:
@@ -68,7 +85,7 @@
 
    JSON SENT (POST /ingest?key=DEV_KEY), every field optional, absent = not measured
      {"mq":1.400,"mic":62.0,"t":27.4,"h":51.2,"p":1004.5,"pitch":-4.0,"roll":7.0,
-      "lat":28.6134,"lon":77.2090,"alt":212.4,"sats":8,"flags":0,"csq":17,"ago":0}
+      "lat":28.6134,"lon":77.2090,"alt":212.4,"sats":8,"bat":78,"flags":0,"csq":17,"ago":0,"n":1048577,"sig":"..."}
      flags: 1 = MQ-135 over threshold, 2 = MQ-135 still warming up (alerts held),
             4 = hot, 8 = loud, 16 = shake, 32 = SOS, 64 = fall suspected.
      alt = GPS altitude in metres. The relay needs it to tell a climb from a falling barometer.
@@ -82,6 +99,7 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
+#include "mbedtls/md.h"                // HMAC-SHA256 for signed packets
 #include <stdarg.h>
 #include <math.h>
 
@@ -118,6 +136,11 @@ static const char* DEV_KEY_DEFAULT = "PASTE_DEVICE_KEY_HERE";
 #define MOVE_G       0.12f       // g deviation that counts as "they are moving"
 #define FALL_STILL_MS 15000UL    // no movement for this long after an impact = suspected fall
 #define SOS_HOLD_MS  3000UL      // hold BOOT this long to send an SOS
+#define FALL_CANCEL_MS 10000UL   // after a suspected fall the unit warns for this long; a BOOT tap says "I'm fine"
+#define SMS_REPEAT_MS 600000UL   // while an SOS or fall stands, text the position again this often
+#define BAT_FITTED   1           // 0 if no Li-ion cell + divider is wired to BAT_PIN (a floating pin would read nonsense)
+#define BAT_PIN      33
+#define BAT_DIVIDER  2.0f        // 100k top / 100k bottom: a 4.2 V cell reads 2.1 V at the pin
 #define VIEWS        7
 // ---------------------------------------------------------------------
 
@@ -126,6 +149,10 @@ HardwareSerial gps(2);
 Preferences prefs;
 
 static char apn[40], relay[96], devKey[48];
+static char devId[24];                        // device id from the dashboard. When set, every packet is signed (HMAC-SHA256)
+static char smsTo[3][20];                     // up to three numbers that get a text on SOS or fall
+static uint8_t smsN = 0;
+static uint32_t bootNo = 0, pktSeq = 0;       // replay counter n = (boot number << 20) | packet number
 static char wifiSsid[40], wifiPass[64];       // WiFi is the fast path; the SIM800L is the fallback in the field
 static bool simOn = true;
 static bool wifiUp() { return wifiSsid[0] && WiFi.status() == WL_CONNECTED; }
@@ -421,9 +448,19 @@ static float micDb() {
   return (float)(db < 30 ? 30 : (db > 110 ? 110 : db));
 }
 
+// 1S Li-ion resting-voltage curve -> percent (an estimate: it sags under load)
+static int batPercent(float v) {
+  static const float V[] = { 3.30f, 3.50f, 3.60f, 3.70f, 3.80f, 3.90f, 4.00f, 4.10f, 4.20f };
+  static const int   P[] = { 0, 5, 10, 25, 45, 65, 80, 92, 100 };
+  if (v <= V[0]) return 0;
+  for (int i = 1; i < 9; i++) if (v <= V[i]) return (int)(P[i - 1] + (P[i] - P[i - 1]) * (v - V[i - 1]) / (V[i] - V[i - 1]) + 0.5f);
+  return 100;
+}
+
 // ------------------------------ readings cache -------------------------
 struct Reading {
-  bool have = false, hasT = false, hasH = false, hasP = false, hasMpu = false;
+  bool have = false, hasT = false, hasH = false, hasP = false, hasMpu = false, hasBat = false;
+  int bat = 0;
   float t = 0, h = 0, p = 0, mq = 0, db = 0, pitch = 0, roll = 0;
   bool shake = false, warm = false;
   uint8_t flags = 0;
@@ -463,8 +500,9 @@ static const Item& qFront() { return q[qHead]; }
 // milliseconds and would otherwise be missed. Impact + stillness = suspected fall,
 // decided here on the device so it works with no signal at all.
 static float peakDev = 0;                      // largest |g - 1| since the last sample()
-static uint32_t impactAt = 0, lastMoveAt = 0;
-static bool fall = false;
+static uint32_t impactAt = 0, lastMoveAt = 0, pendingAt = 0;
+static bool fall = false, fallPending = false, fallNew = false;
+static void lcdShow();
 
 static void pollMotion() {
   static uint32_t next = 0;
@@ -478,14 +516,29 @@ static void pollMotion() {
   if (mag > FALL_IMPACT_G) { impactAt = now ? now : 1; lastMoveAt = now; }
   else if (dev > MOVE_G) {
     lastMoveAt = now;
-    if (impactAt && now - impactAt > 3000) { impactAt = 0; fall = false; }    // moving again: they got up
+    if (impactAt && now - impactAt > 3000) { impactAt = 0; fall = false; fallPending = false; }    // moving again: they got up
   }
-  if (impactAt && !fall && now - impactAt > FALL_STILL_MS && now - lastMoveAt > FALL_STILL_MS) fall = true;
+  // impact, then stillness: do NOT alarm yet. Warn out loud for FALL_CANCEL_MS so a person who is fine can cancel with BOOT.
+  if (impactAt && !fall && !fallPending && now - impactAt > FALL_STILL_MS && now - lastMoveAt > FALL_STILL_MS) { fallPending = true; pendingAt = now; }
+  if (fallPending) {
+    if (now - pendingAt >= FALL_CANCEL_MS) { fallPending = false; fall = true; fallNew = true; }   // nobody cancelled: it is real
+    else {
+      static uint32_t lastTick = 0;
+      if (now - lastTick >= 1000) { lastTick = now; spkTone(2400, 150); lcdShow(); }
+    }
+  }
 }
 
 // ------------------------------ display --------------------------------
 static void lcdShow() {
   char a[17], b[17];
+  if (fallPending) {                                   // takes over the screen during the cancel window
+    const int left = (int)((FALL_CANCEL_MS - (millis() - pendingAt) + 999) / 1000);
+    snprintf(a, sizeof a, "FALL? PRESS BOOT");
+    snprintf(b, sizeof b, "to cancel: %2ds", left < 0 ? 0 : left);
+    lcd.row(0, a); lcd.row(1, b);
+    return;
+  }
   switch (view) {
     case 0:
       if (R.hasT) {
@@ -591,7 +644,8 @@ static void readCsq() {
 static void buildUrl() {
   size_t n = strlen(relay);
   while (n && relay[n - 1] == '/') relay[--n] = 0;
-  snprintf(url, sizeof url, "%s/ingest?key=%s", relay, devKey);
+  if (devId[0]) snprintf(url, sizeof url, "%s/ingest?id=%s", relay, devId);      // signed: the secret never travels
+  else          snprintf(url, sizeof url, "%s/ingest?key=%s", relay, devKey);
 }
 
 static bool httpInit() {
@@ -633,18 +687,70 @@ static bool gprsUp() {
 
 static void gprsDown() { at("AT+HTTPTERM", "OK", 3000); at("AT+SAPBR=0,1", "OK", 10000); }
 
-// Stamp the packet's age at the moment it really leaves: {...} -> {...,"ago":N}
+// --------------------------- SMS (SIM800L) ------------------------------
+// A text needs only 2G signal, no data plan and no relay, so it gets out of places GPRS cannot.
+static bool waitPrompt(uint32_t ms) {                  // the modem answers AT+CMGS with a bare '>' (no newline)
+  const uint32_t t0 = millis();
+  while (millis() - t0 < ms) {
+    while (sim.available()) if (sim.read() == '>') return true;
+    idleWork(); delay(1); yield();
+  }
+  return false;
+}
+
+static bool smsSend(const char* to, const char* text) {
+  flushSim();
+  if (!at("AT", "OK", 2000)) return false;
+  if (!at("AT+CMGF=1", "OK", 2000)) return false;
+  char cmd[44];
+  snprintf(cmd, sizeof cmd, "AT+CMGS=\"%s\"", to);
+  flushSim();
+  sim.println(cmd);
+  if (!waitPrompt(5000)) return false;
+  sim.print(text);
+  sim.write((uint8_t)0x1A);                            // Ctrl+Z sends it
+  return waitFor("+CMGS:", 30000);
+}
+
+static uint32_t smsNext = 0;
+static void smsAlert(const char* why) {
+  if (!smsN || !simOn) return;
+  char msg[161];
+#if USE_GPS
+  if (gpsFix) {
+    snprintf(msg, sizeof msg, "OMNIKIT %s. %.5f,%.5f alt %.0fm https://maps.google.com/?q=%.5f,%.5f", why, gpsLat, gpsLon, gpsHasAlt ? gpsAlt : 0.0, gpsLat, gpsLon);
+  } else
+#endif
+  snprintf(msg, sizeof msg, "OMNIKIT %s. No GPS fix yet. Please call.", why);
+  if (R.hasBat && strlen(msg) < 140) snprintf(msg + strlen(msg), sizeof msg - strlen(msg), " bat %d%%", R.bat);
+  for (uint8_t i = 0; i < smsN; i++) Serial.printf("SMS to %s: %s\n", smsTo[i], smsSend(smsTo[i], msg) ? "sent" : "FAILED (SIM registered? credit? number format +CCNNNNNNNNNN)");
+}
+
+// Finish the packet at the moment it really leaves: {...} -> {...,"ago":N}
+// Signed mode adds a counter that only goes up and an HMAC-SHA256 over everything before it:
+//   {...,"ago":N,"n":COUNTER,"sig":"64 hex"}   the relay recomputes it with the device secret and refuses forgeries and replays.
 static bool stampBody(const Item& it, char* out, size_t cap) {
   const size_t bl = strlen(it.body);
-  if (bl < 2 || bl + 16 >= cap) return false;
+  if (bl < 2 || bl + 112 >= cap) return false;
   memcpy(out, it.body, bl - 1);
-  snprintf(out + bl - 1, cap - bl + 1, ",\"ago\":%lu}", (unsigned long)((millis() - it.at) / 1000UL));
+  size_t n = bl - 1;
+  n += snprintf(out + n, cap - n, ",\"ago\":%lu", (unsigned long)((millis() - it.at) / 1000UL));
+  if (devId[0]) {
+    n += snprintf(out + n, cap - n, ",\"n\":%llu", (unsigned long long)(((uint64_t)bootNo << 20) | (pktSeq++ & 0xFFFFF)));
+    uint8_t mac[32];
+    mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), (const uint8_t*)devKey, strlen(devKey), (const uint8_t*)out, n, mac);
+    n += snprintf(out + n, cap - n, ",\"sig\":\"");
+    for (int i = 0; i < 32; i++) n += snprintf(out + n, cap - n, "%02x", mac[i]);
+    snprintf(out + n, cap - n, "\"}");
+  } else {
+    snprintf(out + n, cap - n, "}");
+  }
   return true;
 }
 
 // WiFi path: plain http:// or https:// (https skips certificate checks: fine for a demo, not for secrets).
 static bool wifiPost(const Item& it) {
-  static char out[260];
+  static char out[360];
   if (!stampBody(it, out, sizeof out)) return true;       // malformed: drop it rather than retry forever
   HTTPClient http;
   WiFiClientSecure sec;
@@ -661,7 +767,7 @@ static bool wifiPost(const Item& it) {
 }
 
 static bool httpPost(const Item& it) {
-  static char out[260];
+  static char out[360];
   if (!stampBody(it, out, sizeof out)) return true;       // malformed: drop it rather than retry forever
   const char* body = out;
   char cmd[64];
@@ -690,6 +796,15 @@ static void loadCfg() {
   String ws = prefs.getString("ssid", "");
   String wp = prefs.getString("wpass", "");
   simOn = prefs.getString("sim", "on") != "off";
+  String di = prefs.getString("id", "");
+  String sm[3] = { prefs.getString("sms0", ""), prefs.getString("sms1", ""), prefs.getString("sms2", "") };
+  prefs.end();
+  strlcpy(devId, di.c_str(), sizeof devId);
+  smsN = 0;
+  for (int i = 0; i < 3; i++) if (sm[i].length()) strlcpy(smsTo[smsN++], sm[i].c_str(), sizeof smsTo[0]);
+  prefs.begin("omnikit", false);                       // one flash write per boot keeps the replay counter ahead of every earlier packet
+  bootNo = prefs.getUInt("boot", 0) + 1;
+  prefs.putUInt("boot", bootNo);
   prefs.end();
   strlcpy(wifiSsid, ws.c_str(), sizeof wifiSsid);
   strlcpy(wifiPass, wp.c_str(), sizeof wifiPass);
@@ -737,6 +852,20 @@ static void handleCmd(char* s) {
     char* v = s + 4; while (*v == ' ') v++;
     strlcpy(devKey, v, sizeof devKey); saveCfg("key", devKey); buildUrl(); online = false;
     Serial.println("device key saved");
+  } else if (!strncmp(s, "id ", 3)) {
+    char* v = s + 3; while (*v == ' ') v++;
+    if (!strcmp(v, "off")) { devId[0] = 0; saveCfg("id", ""); buildUrl(); online = false; Serial.println("signing OFF (legacy key-in-URL mode)"); }
+    else { strlcpy(devId, v, sizeof devId); saveCfg("id", devId); buildUrl(); online = false; Serial.println("device id saved: packets are now SIGNED (HMAC-SHA256), the key never leaves the board"); }
+  } else if (!strncmp(s, "sms ", 4)) {
+    char* v = s + 4; while (*v == ' ') v++;
+    if (!strcmp(v, "clear")) { for (int i = 0; i < 3; i++) { char k[8]; snprintf(k, sizeof k, "sms%d", i); saveCfg(k, ""); } smsN = 0; Serial.println("sms numbers cleared"); }
+    else if (!strcmp(v, "test")) { if (!smsN) Serial.println("no numbers: sms +91XXXXXXXXXX"); else { const bool so = sos; sos = false; smsAlert("TEST"); sos = so; } }
+    else if (smsN >= 3) Serial.println("three numbers already saved: sms clear");
+    else {
+      size_t L = strlen(v), digits = 0; for (size_t i = 0; i < L; i++) if (v[i] >= '0' && v[i] <= '9') digits++;
+      if (L < 6 || L > 18 || digits + (v[0] == '+' ? 1 : 0) != L) { Serial.println("use international format, e.g. sms +919876543210"); }
+      else { strlcpy(smsTo[smsN], v, sizeof smsTo[0]); char k[8]; snprintf(k, sizeof k, "sms%d", smsN); saveCfg(k, smsTo[smsN]); smsN++; Serial.printf("sms number %d saved: %s (texts the position on SOS or fall)\n", smsN, v); }
+    }
   } else if (!strncmp(s, "apn ", 4)) {
     char* v = s + 4; while (*v == ' ') v++;
     strlcpy(apn, v, sizeof apn); saveCfg("apn", apn); online = false;
@@ -745,8 +874,9 @@ static void handleCmd(char* s) {
     Serial.printf("relay=%s  apn=%s  key=%s...  sim=%s online=%d  queued=%d  csq=%d\n",
                   relay, apn, String(devKey).substring(0, 4).c_str(), simOn ? "on" : "off", online, qCount, csq);
     Serial.printf("wifi=%s  %s\n", wifiSsid[0] ? wifiSsid : "(not set)", wifiUp() ? "CONNECTED" : "not connected");
+    Serial.printf("signing=%s  id=%s  boot#%lu   sms numbers=%d   battery=%s\n", devId[0] ? "ON" : "off", devId[0] ? devId : "(not set)", (unsigned long)bootNo, smsN, R.hasBat ? String(R.bat).c_str() : "n/a");
   } else {
-    Serial.println("commands: relay <http(s)://host> | key <device key> | wifi <ssid> <password> | wifi off | sim on|off | apn <name> | status");
+    Serial.println("commands: relay <http(s)://host> | id <device id> | key <device key> | wifi <ssid> <password> | wifi off | sim on|off | sms <+number> | sms clear | sms test | apn <name> | status");
   }
 }
 
@@ -785,6 +915,14 @@ static void sample() {
 
   R.mq = volts(MQ_PIN);
   R.db = micDb();
+#if BAT_FITTED
+  {                                                    // 1S Li-ion through a 100k/100k divider. Under 2.5 V there is no cell: report nothing.
+    uint32_t tot = 0; for (int i = 0; i < 8; i++) tot += analogReadMilliVolts(BAT_PIN);
+    const float vb = tot / 8.0f / 1000.0f * BAT_DIVIDER;
+    R.hasBat = vb > 2.5f;
+    if (R.hasBat) R.bat = batPercent(vb);
+  }
+#endif
   R.warm = millis() < MQ_WARMUP_MS;
 
   R.hasMpu = false; R.shake = false;
@@ -828,6 +966,7 @@ static void sample() {
     if (gpsHasAlt) jb(lastBody, sizeof lastBody, len, ",\"alt\":%.1f", gpsAlt);
   }
 #endif
+  if (R.hasBat) jb(lastBody, sizeof lastBody, len, ",\"bat\":%d", R.bat);
   jb(lastBody, sizeof lastBody, len, ",\"flags\":%u", (unsigned)flags);
   if (csq >= 0) jb(lastBody, sizeof lastBody, len, ",\"csq\":%d", csq);
   jb(lastBody, sizeof lastBody, len, "}");
@@ -865,7 +1004,14 @@ static void pollButton() {
   }
   if (now == HIGH && last == LOW && !longDone) {
     const uint32_t held = millis() - downAt;
-    if (held > 1200) {                                                    // 1.2 s: mute
+    if (fallPending && held > 40 && held <= 1200) {                       // tap during the warning: "I'm fine"
+      fallPending = false; impactAt = 0; lastMoveAt = millis();
+      spkChirp();
+      lcd.row(0, "FALL CANCELLED");
+      lcd.row(1, "glad you are ok");
+      delay(900);
+      lcdShow();
+    } else if (held > 1200) {                                             // 1.2 s: mute
       muted = !muted;
       if (!muted) spkChirp();
       lcd.row(0, muted ? "SOUND MUTED" : "SOUND ON");
@@ -891,6 +1037,9 @@ void setup() {
 
   analogSetPinAttenuation(MQ_PIN, ADC_11db);
   analogSetPinAttenuation(MIC_PIN, ADC_11db);
+#if BAT_FITTED
+  analogSetPinAttenuation(BAT_PIN, ADC_11db);
+#endif
 
   loadCfg();
   Wire.begin(SDA_PIN, SCL_PIN, 100000);
@@ -942,6 +1091,11 @@ void loop() {
   pollMotion();
 
   if (millis() - lastSample >= SAMPLE_MS) { lastSample = millis(); sample(); }
+
+  // a confirmed fall (nobody cancelled) goes out at once, by data and by text
+  if (fallNew) { fallNew = false; lastUp = 0; smsNext = 0; }
+  if ((sos || fall) && smsN && simOn && millis() >= smsNext) { smsNext = millis() + SMS_REPEAT_MS; smsAlert(sos ? "SOS" : "FALL"); }
+  if (!sos && !fall) smsNext = 0;
 
   // queue the freshest reading once per UPLOAD_MS (at once after SOS: lastUp was zeroed)
   if (haveBody && (lastUp == 0 || millis() - lastUp >= UPLOAD_MS)) { lastUp = millis(); qPush(lastBody); }

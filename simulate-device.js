@@ -8,17 +8,28 @@
 //   node simulate-device.js URL KEY --fall                                   # one live fall packet
 //
 // Options: --kind hiker|buddy|base (default hiker)   --interval 10 (seconds between live packets)
+//          --signed      sign every packet with HMAC-SHA256 like the firmware (uses the device ID, so pass --id DEVICE_ID).
+//                        Do not point --signed at a unit that also has real hardware: both share one replay counter.
 // It sends exactly what the firmware sends: JSON to /ingest?key=KEY, with "ago" for backfilled packets.
 const T = require('./twin.js');
 const [url, key, ...rest] = process.argv.slice(2);
 if (!url || !key) { console.error('usage: node simulate-device.js <relay-url> <device-key> [--history N] [--live] [--sos] [--fall] [--kind hiker|buddy|base]'); process.exit(1) }
 const opt = n => { const i = rest.indexOf('--' + n); return i < 0 ? null : (rest[i + 1] && !rest[i + 1].startsWith('--') ? rest[i + 1] : true) };
 const kind = opt('kind') || 'hiker', N = opt('history') === null ? T.sim.LAST_MIN : Math.max(0, +opt('history') || 0), every = Math.max(2, +opt('interval') || 10);
-const base = url.replace(/\/+$/, '') + '/ingest?key=' + encodeURIComponent(key);
+const signed = !!opt('signed'), devId = opt('id');
+if (signed && typeof devId !== 'string') { console.error('--signed needs --id DEVICE_ID (the device id, not the key)'); process.exit(1) }
+const base = url.replace(/\/+$/, '') + (signed ? '/ingest?id=' + encodeURIComponent(devId) : '/ingest?key=' + encodeURIComponent(key));
+let counter = Math.floor(Date.now() / 1000);
+const crypto = require('crypto');
 const rand = T.rng(11);
 const send = async body => {
-  const r = await fetch(base, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-  if (!r.ok) { console.error('relay answered HTTP ' + r.status + (r.status === 401 ? ' (wrong device key)' : '')); process.exit(1) }
+  let text = JSON.stringify(body);
+  if (signed) {                                                    // the same wire format as the ESP32: {...,"n":N,"sig":"HEX"}
+    const prefix = text.slice(0, -1) + ',"n":' + (++counter);
+    text = prefix + ',"sig":"' + crypto.createHmac('sha256', key).update(prefix).digest('hex') + '"}';
+  }
+  const r = await fetch(base, { method: 'POST', headers: { 'content-type': 'application/json' }, body: text });
+  if (!r.ok) { let why = ''; try { why = (await r.json()).error } catch {} console.error('relay answered HTTP ' + r.status + (why ? ': ' + why : '') + (why === 'signature required' ? ' (this device signs its packets: add --signed --id DEVICE_ID)' : '')); process.exit(1) }
 };
 (async () => {
   let m = 0, lastPacket = null;

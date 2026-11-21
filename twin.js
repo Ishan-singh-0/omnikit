@@ -87,7 +87,8 @@
 
   /* ------------------------------- assessment ----------------------------- */
   function assess(rows, opts) {
-    const o = Object.assign({}, DEFAULTS, opts || {});
+    const o = Object.assign({}, DEFAULTS);
+    for (const k of Object.keys(opts || {})) if (opts[k] !== undefined && opts[k] !== null || k === 'route') o[k] = opts[k];   // an unset option must not wipe a default
     const now = fin(o.now) ? o.now : Date.now();
     const res = { asOf: now, level: 'nodata', score: 0, factors: [], metrics: {}, headline: 'Waiting for the first packet' };
     if (!rows || !rows.length) return res;
@@ -101,7 +102,7 @@
     let pos = null;
     for (let i = rows.length - 1; i >= 0; i--) if (fin(rows[i].lat) && fin(rows[i].lon)) { pos = rows[i]; break }
     if (pos) m.pos = { lat: pos.lat, lon: pos.lon, sats: pos.sats, alt: fin(pos.alt) ? pos.alt : null, ts: pos.ts, ageSec: Math.max(0, Math.round((now - pos.ts) / 1000)) };
-    for (const k of ['t', 'h', 'p', 'mq', 'mic', 'csq']) { for (let i = rows.length - 1; i >= 0; i--) if (fin(rows[i][k])) { m[k] = rows[i][k]; break } }
+    for (const k of ['t', 'h', 'p', 'mq', 'mic', 'csq', 'bat']) { for (let i = rows.length - 1; i >= 0; i--) if (fin(rows[i][k])) { m[k] = rows[i][k]; break } }
 
     const moving = (a, b) => {
       if ((b.flags | 0) & FLAG.SHAKE) return true;
@@ -122,7 +123,7 @@
       add('sos', 100, 'critical', 'SOS pressed on the device', 'Held BOOT for 3 s at ' + new Date(since).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '. A person asked for help.', 'Dispatch now. Send the rescue brief.');
     }
     if (!o.fixed && (fl & FLAG.FALL)) {
-      add('fall', 85, 'critical', 'Fall suspected', 'The unit felt an impact above 2.2 g, then no movement for 15 s. Decided on the ESP32, no network needed.', 'Call or radio them. If there is no answer, treat as an injury.');
+      add('fall', 85, 'critical', 'Fall suspected', 'The unit felt an impact above 2.2 g, saw no movement for 15 s, and nobody pressed BOOT to cancel in the 10 s warning. Decided on the ESP32, no network needed.', 'Call or radio them. If there is no answer, treat as an injury.');
     }
 
     // ---- weather: pressure trend, corrected for altitude ----
@@ -153,6 +154,9 @@
       else if (m.t <= o.coldWarn) add('cold', 28, 'caution', 'Cold exposure', round(m.t, 1) + ' C' + (fin(m.h) && m.h > 85 ? ' and damp air' : '') + '. Hypothermia risk if they stop moving.', 'Add layers before you cool down.');
     }
 
+    // ---- battery: the most likely real-world failure ----
+    if (fin(m.bat) && m.bat <= 20) add('battery', m.bat <= 10 ? 30 : 25, 'caution', 'Low battery (' + Math.round(m.bat) + ' %)', 'The unit will stop reporting soon. After that the twin only has the last known state.', 'Save power: reduce screen use and sound. Plan to be out before it dies.');
+
     // ---- air and noise (indicators only: MQ-135 cannot name a gas, the mic is uncalibrated) ----
     const warm = (fl & FLAG.WARM) > 0;
     if (!warm && ((fl & FLAG.MQ) || (fin(last.mq) && last.mq > o.mq))) add('air', 30, 'caution', 'Air response elevated', 'MQ-135 at ' + round(last.mq, 2) + ' V. Smoke or fumes are possible. The sensor cannot say which gas.', 'Move upwind and check for fire.');
@@ -173,8 +177,9 @@
 
     // ---- dead-man's switch ----
     const ageMin = m.ageSec / 60;
-    if (ageMin >= o.silentDanger) add('silent', 50, 'danger', (o.fixed ? 'Station' : 'No contact') + ' for ' + Math.round(ageMin) + ' min', 'Last packet at ' + new Date(last.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '. The last known position and conditions are kept below.', 'Go to the last known position.');
-    else if (ageMin >= o.silentWarn) add('silent', 30, 'caution', 'No contact for ' + Math.round(ageMin) + ' min', 'Likely a dead zone or a low battery. The twin keeps the last known state.', 'Try them by phone.');
+    const lowBat = fin(m.bat) && m.bat <= 15, at = new Date(last.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (ageMin >= o.silentDanger) add('silent', 50, 'danger', (o.fixed ? 'Station' : lowBat ? 'Likely battery death' : 'No contact') + ' for ' + Math.round(ageMin) + ' min', 'Last packet at ' + at + (lowBat ? ', battery was at ' + Math.round(m.bat) + ' %. This looks like a flat battery, not a dead zone.' : '. The last known position and conditions are kept below.'), lowBat ? 'Go to the last known position: they cannot be called.' : 'Go to the last known position.');
+    else if (ageMin >= o.silentWarn) add('silent', 30, 'caution', (lowBat ? 'Likely battery death' : 'No contact') + ' for ' + Math.round(ageMin) + ' min', lowBat ? 'Battery was at ' + Math.round(m.bat) + ' % in the last packet at ' + at + '. This looks like a flat battery, not a dead zone.' : 'Likely a dead zone or a low battery. The twin keeps the last known state.', 'Try them by phone.');
     if (fin(m.csq) && m.csq < 8 && ageMin < o.silentWarn) add('signal', 0, 'info', 'Weak signal', 'CSQ ' + m.csq + '. Packets may queue on the device and arrive late.', null);
 
     // ---- fusion: a single odd reading is noise, a combination is a pattern ----
@@ -225,6 +230,7 @@
     if (fin(m.t)) c.push(round(m.t, 1) + ' C');
     if (fin(m.h)) c.push(round(m.h, 0) + ' % RH');
     if (fin(m.p)) c.push(round(m.p, 0) + ' hPa');
+    if (fin(m.bat)) L.push('Battery: ' + Math.round(m.bat) + ' % at last contact');
     if (c.length) L.push('Conditions: ' + c.join(', ') + (m.pressure ? ', pressure ' + (m.pressure.slope < 0 ? 'falling ' : 'rising ') + Math.abs(m.pressure.slope) + ' hPa/h' : ''));
     if (fin(m.offRoute)) L.push('Distance from planned route: ' + m.offRoute + ' m');
     if (fin(m.inactiveMin)) L.push('Last movement: ' + m.inactiveMin + ' min ago');
@@ -259,7 +265,7 @@
       const storm = Math.max(0, m - 26);
       let t = 21 - 6.5 * climb / 1000 - 0.4 * storm + n(0.15);
       const h = clamp(55 + (m > 18 ? 0.9 * (m - 18) : 0) + n(1), 20, 95);
-      let lat, lon, pitch, roll, flags = 0, mq = 1.35 + n(0.05), mic = 46 + n(5) + (m > 35 ? 10 : 0), csq = clamp(Math.round(17 + n(2)), 8, 26), sats = clamp(Math.round(8 + n(1.2)), 6, 10);
+      let lat, lon, pitch, roll, flags = 0, mq = 1.35 + n(0.05), mic = 46 + n(5) + (m > 35 ? 10 : 0), csq = clamp(Math.round(17 + n(2)), 8, 26), bat = fixed ? null : clamp(Math.round(96 - 0.35 * m - (kind === 'buddy' ? 4 : 0) + n(0.4)), 5, 100), sats = clamp(Math.round(8 + n(1.2)), 6, 10);
       if (fixed) {
         lat = START.lat + n(0.00002); lon = START.lon + n(0.00002); pitch = n(0.3); roll = n(0.3);
       } else {
@@ -282,7 +288,7 @@
       if (inj.sos) flags |= FLAG.SOS;
       if (inj.cold) t = -3;
       if (inj.heat) t = 41;
-      return { t: round(t, 2), h: round(h, 1), p: round(p, 2), mq: round(mq, 3), mic: round(mic, 1), pitch: round(pitch, 1), roll: round(roll, 1), lat: round(lat, 6), lon: round(lon, 6), sats, alt: round(alt, 1), flags, csq };
+      return { t: round(t, 2), h: round(h, 1), p: round(p, 2), mq: round(mq, 3), mic: round(mic, 1), pitch: round(pitch, 1), roll: round(roll, 1), lat: round(lat, 6), lon: round(lon, 6), sats, alt: round(alt, 1), flags, csq, ...(bat === null ? {} : { bat }) };
     }
   };
 

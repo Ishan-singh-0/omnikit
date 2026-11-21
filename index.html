@@ -17,7 +17,7 @@ aside{position:sticky;top:0;height:100vh;background:var(--side);border-right:1px
 aside a{display:block;padding:9px 12px;border-radius:8px;color:var(--mute);text-decoration:none;font-size:14px}aside a:hover{background:var(--panel);color:var(--ink)}
 .sp{flex:1}
 main{padding:0 36px 90px;max-width:1280px;width:100%}
-button,input[type=text],input[type=password],input[type=number],textarea{font:500 13px var(--sans);background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:9px 14px}
+button,select,input[type=text],input[type=password],input[type=number],textarea{font:500 13px var(--sans);background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:9px 14px}
 textarea{width:100%;font:12.5px/1.6 var(--mono);resize:vertical}
 button{cursor:pointer;transition:border-color .15s,background .15s}button:hover:not(:disabled){border-color:var(--saffron)}button:disabled{opacity:.4;cursor:not-allowed}
 button.pri{background:var(--saffron);border-color:var(--saffron);color:#1a1409;font-weight:600}
@@ -55,17 +55,22 @@ label.ck{display:flex;gap:10px;margin:8px 0;font-size:14px;color:var(--mute)}
 .cmd button{display:block;width:100%;text-align:left;margin:6px 0}
 .sim{display:grid;gap:14px}.sim input[type=range]{width:100%;accent-color:var(--saffron)}.chips{display:flex;gap:8px;flex-wrap:wrap}.chips button{padding:6px 11px;font-size:12px}
 .loc{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(240px,1fr);gap:18px}@media(max-width:900px){.loc{grid-template-columns:1fr}}a.lnk{color:var(--saffron)}
+.rp{font:600 12px var(--mono);letter-spacing:.08em;color:var(--c);border:1px solid var(--c);border-radius:99px;padding:2px 12px;white-space:nowrap}
+.brief{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin:0 0 14px}.brief div{background:var(--side);border:1px solid var(--line);border-radius:10px;padding:10px 12px}.brief small{display:block;color:var(--mute);font:11.5px var(--mono)}.brief b{display:block;font:500 14px/1.5 var(--sans);word-break:break-word}.brief .wide{grid-column:1/-1}
+.lg div{display:grid;grid-template-columns:54px 1fr;gap:8px;padding:6px 0;border-top:1px solid var(--line);font-size:13.5px}.lg i{font-style:normal;color:var(--mute);font-family:var(--mono)}
+#boardT tbody tr{cursor:pointer}#boardT tbody tr:hover{background:var(--panel2)}#boardT tbody tr.sel{outline:2px solid var(--saffron);outline-offset:-2px}
 @media(max-width:900px){.app{grid-template-columns:1fr}aside{position:static;height:auto;flex-direction:row;flex-wrap:wrap;align-items:center;padding:14px 16px}.tag2,.sp{display:none}main{padding:0 18px 80px}}
 @media print{body{background:#fff;color:#000}aside,.noprint,.sos{display:none!important}.panel,.kpi,.f{background:#fff;border-color:#999}.app{display:block}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 </style></head><body>
 <div class="app"><aside><div class="brand">OMNIKIT</div><div class="tag2">survival digital twin</div>
-<a href="#twin">Digital twin</a><a href="#story" id="navStory">Mission replay</a><a href="#rec">Trends</a><a href="#loc">Map &amp; posture</a><a href="#fleet">Team</a><a href="#alerts">Timeline &amp; rules</a><a href="#hw">Connect hardware</a><a href="#tools">Reports</a><div class="sp"></div>
+<a href="#board" id="navBoard" style="display:none">Incident board</a><a href="#twin">Digital twin</a><a href="#rec">Trends</a><a href="#loc">Map &amp; posture</a><a href="#fleet">Team</a><a href="#alerts">Timeline &amp; rules</a><a href="#hw">Connect hardware</a><a href="#tools">Reports</a><div class="sp"></div>
 <button id="cmdBtn">Commands · Ctrl K</button><button id="userBtn" class="pri">Sign in</button></aside>
 <main>
-<div class="stamp" id="stamp">Simulated mission<small id="stampSub">not from your hardware</small></div>
+<div class="stamp" id="stamp">Simulated data<small id="stampSub">not from your hardware</small></div>
 <div class="sos" id="sosBar" hidden role="alert"><b id="sosTxt"></b><button class="pri" id="sosBrief">Rescue brief</button><button id="sosAck">Silence siren</button></div>
 
+<section id="board" style="padding-top:0;display:none"><h2>Incident board</h2><p class="sub">Every unit shared with the rescue team, most dangerous first. Click a row to open it, then respond.</p><div id="stats" class="note" style="margin:0 0 12px"></div><div class="panel" style="padding:0;overflow:auto"><table id="boardT"><thead><tr><th>Unit</th><th>Risk</th><th>Why</th><th>Last contact</th><th>Response</th></tr></thead><tbody></tbody></table></div></section>
 <section id="twin" style="padding-top:0"><h2>Digital twin</h2><p class="sub" id="devName">—</p>
 <div class="ov"><div class="panel"><div class="gwrap"><canvas id="gauge" width="480" height="480" aria-label="Risk score"></canvas><div class="gtxt"><div class="big" id="score">—</div><div id="verdict">no data</div><small id="headline"></small></div></div>
 <div class="row noprint" style="justify-content:center"><button class="pri" id="briefBtn">Rescue brief</button></div>
@@ -78,14 +83,10 @@ label.ck{display:flex;gap:10px;margin:8px 0;font-size:14px;color:var(--mute)}
 <div class="kpi"><small>Heat index</small><b id="kHeat">—</b><i id="kHeatS"></i></div>
 <div class="kpi"><small>Movement</small><b id="kMove">—</b><i id="kMoveS"></i></div>
 <div class="kpi"><small>Off route</small><b id="kRoute">—</b><i id="kRouteS"></i></div>
-<div class="kpi"><small>Signal (CSQ)</small><b id="kCsq">—</b><i id="kCsqS"></i></div></div>
-<h3 style="margin:6px 0 10px">Why this score</h3><div class="fx" id="fx"></div></div></div></section>
-
-<section id="story"><h2>Mission replay</h2><p class="sub">A scripted 75-minute trek on simulated sensors, run through the same engine as the real relay. Scrub the slider, jump to a moment, or inject your own events.</p>
-<div class="panel sim"><div class="row" style="margin:0"><button class="pri" id="simPlay">Pause</button><button id="simRestart">Restart</button><span class="chips" id="speeds"><button data-s="1" class="on">1×</button><button data-s="3">3×</button><button data-s="8">8×</button></span><b class="note" id="simClock" style="margin-left:auto">—</b></div>
-<input type="range" id="simBar" min="0" max="75" value="0" aria-label="Mission minute">
-<div class="chips"><button data-j="14">Calm climb</button><button data-j="40">Pressure falling</button><button data-j="46">Off the trail</button><button data-j="49">Fall</button><button data-j="51">SOS</button><button data-j="64">Radio dead</button></div>
-<div><div class="note" style="margin-bottom:6px">Inject on the selected unit:</div><div class="chips" id="inj"><button data-i="smoke">Smoke</button><button data-i="loud">Loud noise</button><button data-i="cold">Freezing</button><button data-i="heat">Extreme heat</button><button data-i="fall">Fall</button><button data-i="sos">Press SOS</button></div></div></div></section>
+<div class="kpi"><small>Signal (CSQ)</small><b id="kCsq">—</b><i id="kCsqS"></i></div>
+<div class="kpi"><small>Battery</small><b id="kBat">—</b><i id="kBatS"></i></div></div>
+<h3 style="margin:6px 0 10px">Why this score</h3><div class="fx" id="fx"></div></div></div>
+<div class="panel" id="resp" style="margin-top:18px;display:none"></div></section>
 
 <section id="rec"><h2>Trends</h2><p class="sub">Last 88 samples. Coloured lines mark the moment each warning was raised. Dashed red lines are alert thresholds. The altitude-corrected pressure is what separates a storm from a climb.</p><div class="panel" id="tracks"></div></section>
 <section id="loc"><h2>Map &amp; posture</h2><p class="sub">Drawn from the unit’s own fixes, so it works with no internet and no tile server. The dashed line is the planned route.</p>
@@ -93,7 +94,7 @@ label.ck{display:flex;gap:10px;margin:8px 0;font-size:14px;color:var(--mute)}
 <div class="panel"><h3>Posture</h3><canvas id="lvl" width="360" height="360" style="width:100%;max-width:300px;height:auto;display:block;margin:12px auto 0" aria-label="Tilt level"></canvas><p class="note" id="lvlNote" style="text-align:center"></p></div></div></section>
 
 <section id="fleet"><h2>Team</h2><p class="sub" id="fleetSub">Pick a unit to drive the whole console.</p><div class="tags" id="tags"></div>
-<div class="row noprint"><button id="addPerson">Add person node</button><button id="addStation">Add fixed station</button><button id="routeBtn">Set planned route</button><button id="share">Copy read-only link</button><button id="rotate">Reset share link</button></div><pre id="keyOut" style="display:none"></pre><p class="note">A share link shows live location to anyone who has it. Treat it as a secret and reset it when the trip ends.</p></section>
+<div class="row noprint"><button id="addPerson">Add person node</button><button id="addStation">Add fixed station</button><button id="routeBtn">Set planned route</button><button id="share">Copy read-only link</button><button id="rescueBtn">Share with rescue team</button><button id="keyBtn">Reset device key</button><button id="rotate">Reset share link</button></div><pre id="keyOut" style="display:none"></pre><p class="note">A share link shows live location to anyone who has it. Treat it as a secret and reset it when the trip ends.</p></section>
 
 <section id="alerts"><h2>Timeline &amp; rules</h2><p class="sub">Every warning is a plain rule with a source. Nothing here is a black box.</p><div class="two"><div class="panel"><h3>Event timeline</h3><div class="notes" id="log" role="log" style="margin-top:12px"></div></div>
 <div class="panel"><h3>The rules</h3><table><thead><tr><th>Signal</th><th>Trips at</th><th>Decided</th></tr></thead><tbody>
@@ -121,14 +122,14 @@ label.ck{display:flex;gap:10px;margin:8px 0;font-size:14px;color:var(--mute)}
 </main></div>
 
 <div class="modal" id="authM"><div class="panel"><h2 style="font-size:24px">Sign in</h2><p class="note">Use your relay account, or look around as a demo role.</p><input type="text" id="au" placeholder="Username" autocomplete="username"><input type="password" id="ap" placeholder="Password, 6 or more" autocomplete="current-password"><div class="row"><button id="doLogin" class="pri">Sign in</button><button id="doReg">Create account</button></div><div class="row"><button id="demoOwner">Demo owner</button><button id="demoView">Demo judge, read-only</button><button id="closeAuth">Close</button></div><p class="note" style="color:var(--clay)" id="authErr"></p></div></div>
-<div class="modal" id="cmdM"><div class="panel cmd"><h2 style="font-size:24px">Commands</h2><div id="cmdList"></div><p class="note">Shortcuts: Space pause · B brief · M mute siren</p></div></div>
+<div class="modal" id="cmdM"><div class="panel cmd"><h2 style="font-size:24px">Commands</h2><div id="cmdList"></div><p class="note">Shortcuts: B brief · M mute siren</p></div></div>
 <div class="modal" id="briefM"><div class="panel"><h2 style="font-size:24px">Rescue brief</h2><textarea id="briefTxt" rows="15" readonly></textarea><div class="row"><button class="pri" id="bCopy">Copy</button><a class="lnk" id="bWa" target="_blank" rel="noopener">WhatsApp</a><a class="lnk" id="bSms">SMS</a><button id="bClose">Close</button></div></div></div>
 <div class="modal" id="routeM"><div class="panel"><h2 style="font-size:24px">Planned route</h2><p class="note">One <code>lat,lon</code> per line, at least two. Warnings fire when the unit leaves the corridor.</p><textarea id="routeTxt" rows="8" placeholder="32.2430,76.3213&#10;32.2590,76.3413"></textarea><label class="note" for="corr">Corridor (metres either side)</label><input type="number" id="corr" value="150" min="20" max="5000"><div class="row"><button class="pri" id="rSave">Save</button><button id="rLast">Use the last 40 fixes</button><button id="rClear">Clear</button><button id="rClose">Close</button></div></div></div>
 
 <script src="twin.js"></script>
 <script>
 const $=s=>document.querySelector(s),clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])),fin=v=>typeof v==="number"&&Number.isFinite(v);
-const can=()=>S.role!=="viewer",LV={nodata:"#8e897c",safe:"#4fb3a2",caution:"#e8a33d",danger:"#e0703a",critical:"#e5483c",info:"#8e897c"};
+const can=()=>S.role!=="viewer"&&S.role!=="rescuer",isRes=()=>S.role==="rescuer",roleLabel=r=>r==="admin"?"owner":r==="rescuer"?"rescuer":"member",LV={nodata:"#8e897c",safe:"#4fb3a2",caution:"#e8a33d",danger:"#e0703a",critical:"#e5483c",info:"#8e897c"};
 const M=[{k:"slp",n:"Sea-level pressure · altitude-corrected",u:"hPa",d:1,c:"#9aa6c9",s:2},{k:"p",n:"Station pressure · raw",u:"hPa",d:1,c:"#7a85a8",s:2},{k:"alt",n:"GPS altitude",u:"m",d:0,c:"#9bb56d",s:20},{k:"t",n:"Temperature",u:"°C",d:1,c:"#e0805a",s:4},{k:"h",n:"Humidity",u:"%",d:0,c:"#4fb3a2",s:20},{k:"mq",n:"Air · MQ-135",u:"V",d:2,c:"#e8a33d",s:1,th:2.2},{k:"mic",n:"Sound · relative index",u:"idx",d:0,c:"#c98fb0",s:30,th:78},{k:"pitch",n:"Tilt · pitch",u:"°",d:0,c:"#5aa9d6",s:30},{k:"roll",n:"Tilt · roll",u:"°",d:0,c:"#d9b26a",s:30}];
 const S={devs:[],cur:null,token:null,role:null,user:null,fake:true,paused:false,speed:1,sound:true,silenced:false,tgt:0,gc:"#8e897c",iv:null,sim:{min:0,t0:0}};
 const base=new Date();base.setHours(6,0,0,0);S.sim.t0=base.getTime();
@@ -154,16 +155,16 @@ function simSeek(min){const keep=S.cur?S.devs.indexOf(S.cur):0;S.devs=simDevices
 function simStep(quiet){const s=S.sim;s.min++;S.devs.forEach(dv=>{if(!dv.sim)return;const p=Twin.sim.packet(dv.sim,s.min,dv.rand,dv.inj);if(p)addRow(dv,{...p,ts:nowOf()})});S.devs.forEach(dv=>reassess(dv,quiet))}
 function simTick(){if(!S.fake||S.paused)return;if(S.sim.min>=Twin.sim.END_MIN){S.paused=true;simUi();return}simStep(false);simUi();render()}
 function simLoop(){clearInterval(S.iv);S.iv=setInterval(simTick,1300/S.speed)}
-function simUi(){const m=clamp(S.sim.min,0,Twin.sim.END_MIN);$("#simBar").value=m;$("#simClock").textContent=clock(nowOf())+" · minute "+m+" of "+Twin.sim.END_MIN+(S.paused&&m>=Twin.sim.END_MIN?" · replay finished":"");$("#simPlay").textContent=S.paused?(m>=Twin.sim.END_MIN?"Replay":"Play"):"Pause";document.querySelectorAll("#speeds button").forEach(b=>b.classList.toggle("on",+b.dataset.s===S.speed));document.querySelectorAll("#inj button").forEach(b=>b.classList.toggle("on",!!(S.cur&&S.cur.inj[b.dataset.i])))}
+function simUi(){}
 
 /* ---------- rendering ---------- */
 function lv(dv){return dv&&dv.risk?dv.risk.level:"nodata"}
-function render(){const dv=S.cur;sos();tags();if(!dv){$("#devName").textContent="No units yet. Add one in Team.";return}
+function render(){const dv=S.cur;rescueLbl();sos();tags();if(!dv){$("#devName").textContent="No units yet. Add one in Team.";return}
 const r=dv.risk||Twin.assess([],{}),m=r.metrics||{},L=r.level;S.tgt=L==="nodata"?0:r.score;S.gc=LV[L];
 $("#devName").textContent=dv.name+(dv.kind==="station"?" · fixed station":" · person")+" · "+(dv.sim?"simulated":"live");
 $("#score").textContent=L==="nodata"?"—":r.score;$("#verdict").textContent=L==="nodata"?"no data":L;$("#verdict").style.color=LV[L];$("#headline").textContent=L==="nodata"?"waiting for the first packet":r.headline;document.title=(L==="nodata"?"":(L.toUpperCase()+" "+r.score+" · "))+dv.name+" · OMNIKIT";
 const set=(k,v,s)=>{$("#k"+k).textContent=v;$("#k"+k+"S").textContent=s||""};
-if(L==="nodata"){["Age","Pos","Alt","Trend","Heat","Move","Route","Csq"].forEach(k=>set(k,"—",""))}else{
+if(L==="nodata"){["Age","Pos","Alt","Trend","Heat","Move","Route","Csq","Bat"].forEach(k=>set(k,"—",""))}else{
 const ag=Math.max(0,(nowOf()-m.lastTs)/1000);set("Age",age(ag)+" ago",clock(m.lastTs));$("#kAge").style.color=ag>=300?LV.caution:"";
 set("Pos",m.pos?m.pos.lat.toFixed(4)+", "+m.pos.lon.toFixed(4):"no fix",m.pos?(m.pos.sats?m.pos.sats+" sats · ":"")+"fix "+age(Math.max(0,(nowOf()-m.pos.ts)/1000))+" old":"take it outdoors");
 set("Alt",m.pos&&m.pos.alt!=null?Math.round(m.pos.alt).toLocaleString()+" m":"—",m.pos&&m.pos.alt!=null?"from GPS":"needs a GPS fix");
@@ -171,14 +172,48 @@ set("Trend",m.pressure?(m.pressure.slope>0?"+":"")+m.pressure.slope.toFixed(1)+"
 set("Heat",fin(m.heatIndex)?m.heatIndex.toFixed(0)+" °C":"—",fin(m.t)?"air "+m.t.toFixed(1)+" °C"+(fin(m.h)?" · "+m.h.toFixed(0)+" % RH":""):"");
 set("Move",dv.kind==="station"?"fixed":m.inactiveMin<2?"moving":"still "+m.inactiveMin+" min","from GPS speed, tilt, shake");
 set("Route",fin(m.offRoute)?m.offRoute+" m":"—",dv.route?"limit "+(150)+" m":"no route set");
-set("Csq",fin(m.csq)?m.csq:"—",fin(m.csq)?(m.csq<8?"weak":m.csq<15?"fair":"good"):"")}
+set("Csq",fin(m.csq)?m.csq:"—",fin(m.csq)?(m.csq<8?"weak":m.csq<15?"fair":"good"):"");set("Bat",fin(m.bat)?Math.round(m.bat)+" %":"—",fin(m.bat)?(m.bat<=20?"low: plan to be out":m.bat<=50?"half":"good"):dv.kind==="station"?"mains":"not reported");$("#kBat").style.color=fin(m.bat)&&m.bat<=20?LV.caution:""}
 const fx=$("#fx");const act=(r.factors||[]).filter(f=>f.pts>0||f.sev!=="info");
 fx.innerHTML=L==="nodata"?'<div class="note">Nothing to explain yet.</div>':act.length?act.map(f=>`<div class="f" style="--c:${LV[f.sev]}"><span class="pill">${f.sev}</span><b>${esc(f.label)}</b><span>${esc(f.detail)}</span>${f.action?`<em>${esc(f.action)}</em>`:""}</div>`).join(""):'<div class="f" style="--c:#4fb3a2"><span class="pill">safe</span><b>All clear</b><span>No rule is tripping. The twin keeps watching.</span></div>';
-tracks(dv);locDraw(dv);lvDraw(dv);timeline(dv)}
+tracks(dv);locDraw(dv);lvDraw(dv);timeline(dv);respond(dv);board()}
 function sos(){const c=S.devs.filter(d=>lv(d)==="critical");$("#sosBar").hidden=!c.length;if(c.length){$("#sosTxt").textContent=c.map(d=>d.name+": "+d.risk.headline).join("  ·  ")}}
 function tags(){const g=$("#tags");g.innerHTML="";S.devs.forEach(d=>{const L=lv(d),e=document.createElement("button");e.className="tag"+(d===S.cur?" sel":"");e.style.setProperty("--c",LV[L]);const ag=d.risk&&d.risk.metrics&&d.risk.metrics.lastTs?(nowOf()-d.risk.metrics.lastTs)/1000:null;
-e.innerHTML=`<h3>${esc(d.name)}</h3><div class="n">${L==="nodata"?"—":d.risk.score}</div><small>${L==="nodata"?"waiting":L+" · "+esc(d.risk.headline)}</small><small>${d.kind==="station"?"fixed station":"person"} · ${ag==null?"no packets":age(ag)+" ago"} · ${d.cnt} packets</small>`;e.onclick=()=>{S.cur=d;simUi();render()};g.append(e)})}
+e.innerHTML=`<h3>${esc(d.name)}</h3><div class="n">${L==="nodata"?"—":d.risk.score}</div><small>${L==="nodata"?"waiting":L+" · "+esc(d.risk.headline)}</small><small>${d.kind==="station"?"fixed station":"person"} · ${ag==null?"no packets":age(ag)+" ago"} · ${d.cnt} packets${d.signed?" · signed ✓":""}</small>`;e.onclick=()=>{S.cur=d;simUi();render()};g.append(e)})}
 
+/* ---------- rescue team ---------- */
+const ST={new:["NEW · NOT ACKNOWLEDGED","#e5483c"],ack:["ACKNOWLEDGED","#e8a33d"],dispatched:["TEAM DISPATCHED","#5aa9d6"],onscene:["ON SCENE","#4fb3a2"],resolved:["RESOLVED","#8e897c"]};
+const BRING={sos:"Treat as a live emergency. Radio check on the way in.",fall:"First-aid kit, stretcher or vacuum splint, radio",cold:"Insulation, thermal blankets, hot drinks",heat:"Water, shade, cooling",storm:"Rain shells, headlamps, rope. Check the weather window before committing",route:"Route map. Start at the last fix and search back toward the trail",still:"Radio or satellite phone to reach them",silent:"Go to the last known position",air:"Respiratory protection if smoke is possible",pattern:"Full kit: this matches an incident"};
+const bearing=(a,b)=>{const r=Math.PI/180,y=Math.sin((b.lon-a.lon)*r)*Math.cos(b.lat*r),q=Math.cos(a.lat*r)*Math.sin(b.lat*r)-Math.sin(a.lat*r)*Math.cos(b.lat*r)*Math.cos((b.lon-a.lon)*r);return["N","NE","E","SE","S","SW","W","NW"][Math.round(((Math.atan2(y,q)/r+360)%360)/45)%8]};
+function statsLine(){const s=S.stats,el=$("#stats");if(!s){el.textContent="";return}
+if(!s.resolved){el.innerHTML="<b>Measured accuracy:</b> no incident has been resolved yet. When you close one, choose <b>Real emergency</b>, <b>False alarm</b> or <b>Test or drill</b>: those answers become our false-alarm rate, rule by rule. Nothing here is pre-filled.";return}
+const by=Object.entries(s.byTrigger).map(([k,v])=>k+" "+v.real+" real / "+v.false+" false").join(" · ");
+el.innerHTML="<b>Measured accuracy:</b> "+s.resolved+" resolved · "+s.real+" real · "+s.false+" false alarms · "+s.test+" tests · precision "+(s.precision==null?"n/a":Math.round(s.precision*100)+" %")+(s.medianAckSec!=null?" · median time to acknowledge "+(s.medianAckSec<90?s.medianAckSec+" s":Math.round(s.medianAckSec/60)+" min"):"")+" · "+s.open+" open<br><span>By rule: "+esc(by||"n/a")+"</span>"}
+function board(){const sec=$("#board"),nav=$("#navBoard");if(!isRes()){sec.style.display=nav.style.display="none";return}sec.style.display=nav.style.display="";statsLine();
+const rank=d=>(d.risk&&d.risk.level!=="nodata"?d.risk.score:-1),list=[...S.devs].sort((a,b)=>rank(b)-rank(a));
+$("#boardT tbody").innerHTML=list.map(d=>{const L=lv(d),i=d.incident,st=i?ST[i.status]:null,ag=d.risk&&d.risk.metrics&&d.risk.metrics.lastTs?age(Math.max(0,(nowOf()-d.risk.metrics.lastTs)/1000))+" ago":"—";
+return'<tr data-id="'+esc(d.id)+'" class="'+(d===S.cur?"sel":"")+'"><td><b>'+esc(d.name)+'</b></td><td><span class="rp" style="--c:'+LV[L]+'">'+(L==="nodata"?"NO DATA":L.toUpperCase()+" "+d.risk.score)+'</span></td><td>'+(L==="nodata"?"waiting":esc(d.risk.headline))+'</td><td>'+ag+'</td><td>'+(st?'<span class="rp" style="--c:'+st[1]+'">'+st[0]+'</span>'+(i.by?' <small class="note">'+esc(i.by)+'</small>':""):'<span class="note">—</span>')+'</td></tr>'}).join("");
+$("#boardT tbody").querySelectorAll("tr").forEach(tr=>tr.onclick=()=>{const d=S.devs.find(y=>y.id===tr.dataset.id);if(d){S.cur=d;render();document.documentElement.style.scrollBehavior="auto";scrollTo(0,$("#twin").offsetTop-10)}})}
+function respond(dv){const box=$("#resp"),inc=dv.incident,res=isRes();if(!dv.risk||dv.risk.level==="nodata"||(!inc&&!res)){box.style.display="none";return}
+const old=$("#noteIn"),val=old?old.value:"",foc=!!old&&document.activeElement===old,oo=$("#outcome"),ov=oo?oo.value:"real";box.style.display="";const r=dv.risk,m=r.metrics,st=inc?ST[inc.status]:null;
+let h='<div class="row" style="margin:0 0 14px"><h3 style="font-size:22px;margin:0;font-family:var(--serif)">Response</h3>'+(st?'<span class="rp" style="--c:'+st[1]+'">'+st[0]+'</span>':'<span class="rp" style="--c:#8e897c">NO INCIDENT OPEN</span>')+(inc&&inc.by?'<span class="note">handled by '+esc(inc.by)+'</span>':"")+'</div>';
+if(res){const p=m.pos,F=(l,v,w)=>'<div'+(w?' class="wide"':"")+'><small>'+l+'</small><b>'+v+'</b></div>',acts=[...new Set(r.factors.filter(f=>f.pts>0&&f.action).map(f=>f.action))],bring=[...new Set(r.factors.filter(f=>f.pts>0&&BRING[f.id]).map(f=>BRING[f.id]))],base=S.devs.find(d=>d.kind==="station"&&d.risk&&d.risk.metrics&&d.risk.metrics.pos);
+let pos="No GPS fix was ever received.";if(p){const la=p.lat.toFixed(5),lo=p.lon.toFixed(5);pos=la+", "+lo+" · "+(p.sats?p.sats+" satellites · ":"")+"fix "+age(Math.max(0,(nowOf()-p.ts)/1000))+' old<br><a class="lnk" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query='+la+","+lo+'">Navigate (Google Maps)</a> · <a class="lnk" target="_blank" rel="noopener" href="https://www.openstreetmap.org/?mlat='+la+"&mlon="+lo+"#map=17/"+la+"/"+lo+'">OpenStreetMap</a> · <a class="lnk" href="#" id="cpPos">Copy coordinates</a>'}
+h+='<p class="note" style="margin:0 0 8px">What a responder needs, in one place. Decision support from a prototype node: verify before acting.</p><div class="brief">'+
+F("Last known position",pos,1)+F("Altitude",p&&p.alt!=null?Math.round(p.alt)+" m (GPS)":"unknown")+F("Last contact",m.lastTs?clock(m.lastTs)+" · "+age(Math.max(0,(nowOf()-m.lastTs)/1000))+" ago":"—")+F("Last movement",fin(m.inactiveMin)?(m.inactiveMin<2?"moving":m.inactiveMin+" min ago"):"—")+
+F("Conditions at the unit",[fin(m.t)?m.t.toFixed(1)+" °C":"",fin(m.h)?m.h.toFixed(0)+" % RH":"",fin(m.p)?m.p.toFixed(0)+" hPa":"",m.pressure?(m.pressure.slope<0?"falling ":"rising ")+Math.abs(m.pressure.slope).toFixed(1)+" hPa/h":""].filter(Boolean).join(" · ")||"—")+
+F("Off the planned route",fin(m.offRoute)?m.offRoute+" m":"no route filed")+
+(base&&p?F("From "+esc(base.name),Math.round(Twin.dist(base.risk.metrics.pos.lat,base.risk.metrics.pos.lon,p.lat,p.lon))+" m, bearing "+bearing(base.risk.metrics.pos,p)):"")+
+F("Registered to",esc(dv.owner||"—")+" · "+(dv.kind==="station"?"fixed station":"person"))+
+F("Active hazards",r.factors.filter(f=>f.pts>0).map(f=>esc(f.label)).join(" · ")||"none",1)+(acts.length?F("Recommended actions",acts.map(esc).join("<br>"),1):"")+(bring.length?F("Suggested kit and approach",bring.map(esc).join("<br>"),1):"")+'</div>'+
+'<div class="row" style="margin:0 0 10px"><button class="pri" data-a="ack">Acknowledge</button><button data-a="dispatch">Dispatch team</button><button data-a="onscene">On scene</button><select id="outcome" aria-label="What was it"><option value="real">Real emergency</option><option value="false">False alarm</option><option value="test">Test or drill</option></select><button data-a="resolve">Resolve</button><button id="briefBtn3">Rescue brief</button></div><div class="row" style="margin:0 0 12px"><input type="text" id="noteIn" placeholder="Note for the log, e.g. Team Alpha, 4 people, ETA 40 min" style="flex:1;min-width:240px"><button data-a="note">Add note</button></div>'}
+const lg=(inc&&inc.log||[]).slice().reverse();h+='<h3 style="margin:6px 0">Response log</h3><div class="lg">'+(lg.length?lg.map(e=>'<div><i>'+clock(e.ts)+'</i><span>'+esc(e.text)+'</span></div>').join(""):'<div style="grid-template-columns:1fr"><span class="note">Nothing yet.'+(res?" Press Acknowledge to take this one.":"")+'</span></div>')+'</div>';
+box.innerHTML=h;const os=$("#outcome");if(os)os.value=ov;const ni=$("#noteIn");if(ni){ni.value=val;if(foc){ni.focus();ni.setSelectionRange(val.length,val.length)}}
+const cp=$("#cpPos");if(cp)cp.onclick=async e=>{e.preventDefault();try{await navigator.clipboard.writeText(dv.risk.metrics.pos.lat.toFixed(6)+","+dv.risk.metrics.pos.lon.toFixed(6));cp.textContent="Copied"}catch{}};
+const bb=$("#briefBtn3");if(bb)bb.onclick=openBrief;
+box.querySelectorAll("[data-a]").forEach(b=>b.onclick=async()=>{try{const y=await api("/api/devices/"+dv.id+"/respond",{method:"POST",body:JSON.stringify({action:b.dataset.a,text:$("#noteIn").value,outcome:$("#outcome")?$("#outcome").value:undefined})});dv.incident=y.incident;$("#noteIn").value="";render();pull()}catch(e){alert(e.message)}})}
+$("#keyBtn").onclick=async()=>{const d=S.cur;if(!d||!S.token)return alert("Needs the relay.");if(!confirm("Issue a new secret key for "+d.name+"? The ESP32 stops reporting until you type the new key into it."))return;try{const y=await api("/api/devices/"+d.id+"/key",{method:"POST",body:"{}"});d.key=y.key;d.signed=false;const o=$("#keyOut");o.style.display="block";o.textContent="New secret for "+d.name+". Type into the ESP32 Serial Monitor:\nid    "+d.id+"\nkey   "+y.key}catch(e){alert(e.message)}};
+$("#rescueBtn").onclick=async()=>{const d=S.cur;if(!d||!S.token)return alert("Needs the relay.");try{const y=await api("/api/devices/"+d.id+"/rescue",{method:"POST",body:JSON.stringify({on:!d.rescue})});d.rescue=y.rescue;rescueLbl()}catch(e){alert(e.message)}};
+function rescueLbl(){const d=S.cur;$("#rescueBtn").textContent=d&&d.rescue?"Shared with rescue team: on":"Share with rescue team"}
 /* ---------- charts ---------- */
 $("#tracks").innerHTML=M.map(m=>`<div class="track" id="b_${m.k}"><div class="tl"><span class="tn">${m.n}</span><b id="v_${m.k}">—</b><small id="r_${m.k}"></small></div><canvas id="c_${m.k}" width="900" height="110"></canvas></div>`).join("");
 M.forEach(m=>{const c=$("#c_"+m.k);c.onmousemove=e=>{const r=c.getBoundingClientRect();c._x=(e.clientX-r.left)/r.width*900;S.cur&&track(m,S.cur)};c.onmouseleave=()=>{c._x=null;S.cur&&track(m,S.cur)}});
@@ -222,19 +257,19 @@ x.lineWidth=12;x.strokeStyle=S.gc;x.beginPath();x.arc(cx,cy,R,a0,ang(Math.max(po
 
 /* ---------- relay ---------- */
 async function api(p,o={}){const r=await fetch(p,{...o,headers:{"content-type":"application/json",...(S.token?{authorization:"Bearer "+S.token}:{})}});const j=await r.json();if(!r.ok)throw new Error(j.error||r.status);return j}
-function merge(dv,x){dv.name=x.name;dv.kind=x.kind||dv.kind;dv.route=x.route;x.rows.forEach(r=>{if(dv.seen.has(r.ts))return;dv.seen.add(r.ts);addRow(dv,r)});dv.rows.sort((a,b)=>a.ts-b.ts);dv.risk=x.risk;
+function merge(dv,x){dv.name=x.name;dv.kind=x.kind||dv.kind;dv.route=x.route;x.rows.forEach(r=>{if(dv.seen.has(r.ts))return;dv.seen.add(r.ts);addRow(dv,r)});dv.rows.sort((a,b)=>a.ts-b.ts);dv.risk=x.risk;dv.incident=x.incident;dv.rescue=x.rescue;dv.owner=x.mine;
 const fresh=x.events.filter(e=>e.ts>dv.evTs);if(x.events.length)dv.evTs=Math.max(dv.evTs,x.events[x.events.length-1].ts);if(dv.seeded)fresh.filter(e=>e.notify).forEach(e=>fireAlert(dv,e));dv.events=x.events;dv.seeded=true}
-async function pull(){try{(await api("/api/devices")).forEach(x=>{let d=S.devs.find(y=>y.id===x.id);if(!d){d=mk(x.id,x.name,x.kind);S.devs.push(d)}d.key=x.key;d.share=x.share;merge(d,x)});if(!S.cur||!S.cur.rows.length){const live=S.devs.filter(x=>x.rows.length).sort((a,b)=>b.last-a.last)[0];S.cur=live||S.cur||S.devs[0]}render();setup();const d=S.cur;if(d&&d.key)$("#curl").textContent=`curl -X POST "${location.origin}/ingest?key=${d.key}" -d '{"t":14,"h":80,"p":790,"lat":32.25,"lon":76.33,"alt":1960,"flags":32}'`}catch{}}
-function setup(){const d=S.cur;if(S.fake||!d||!d.key)return;const https=location.protocol==="https:";$("#setupCmd").textContent="relay "+location.origin+"\nkey   "+d.key+"\nwifi  YourHotspot YourPassword"+(https?"\n\n# This site is https: the ESP32 reaches it over WiFi. The SIM800L needs a plain http:// relay (see tunnel.sh).":"");
+async function pull(){try{(await api("/api/devices")).forEach(x=>{let d=S.devs.find(y=>y.id===x.id);if(!d){d=mk(x.id,x.name,x.kind);S.devs.push(d)}d.key=x.key;d.share=x.share;merge(d,x)});if(!S.cur||!S.cur.rows.length){const live=S.devs.filter(x=>x.rows.length).sort((a,b)=>((b.risk?b.risk.score:0)-(a.risk?a.risk.score:0))||b.last-a.last)[0];S.cur=live||S.cur||S.devs[0]}if(isRes())try{S.stats=await api("/api/stats")}catch{}render();setup();const d=S.cur;if(d&&d.key)$("#curl").textContent=`curl -X POST "${location.origin}/ingest?key=${d.key}" -d '{"t":14,"h":80,"p":790,"lat":32.25,"lon":76.33,"alt":1960,"flags":32}'`}catch{}}
+function setup(){const d=S.cur;if(S.fake||!d||!d.key)return;const https=location.protocol==="https:";$("#setupCmd").textContent="relay "+location.origin+"\nid    "+d.id+"\nkey   "+d.key+"\nwifi  YourHotspot YourPassword"+(https?"\n\n# This site is https: the ESP32 reaches it over WiFi. The SIM800L needs a plain http:// relay (see tunnel.sh).":"");
 const t=d.rows.length?(nowOf()-d.rows[d.rows.length-1].ts)/1000:null;$("#lastPkt").textContent=t==null?"Waiting for the first packet from "+d.name+"…":"Last packet from "+d.name+": "+age(t)+" ago · "+d.cnt+" received"}
 $("#testPkt").onclick=async()=>{const d=S.cur;if(!d||!d.key||S.fake){$("#testRes").textContent="Sign in and add a node first.";return}
 try{const r=await fetch("/ingest?key="+encodeURIComponent(d.key),{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({t:21.5,h:55,p:812,mq:1.3,mic:48,pitch:-6,roll:3,lat:32.243+Math.random()*.0004,lon:76.3213+Math.random()*.0004,alt:1900,sats:8,csq:17,flags:0})});$("#testRes").textContent=r.ok?"Sent. It should appear above within 3 s.":"Relay answered "+r.status;if(r.ok)setTimeout(pull,600)}catch(e){$("#testRes").textContent="Could not reach the relay"}};
 setInterval(()=>{if(!S.fake)setup()},1000);
-function stamp(){const e=$("#stamp");e.className="stamp"+(S.fake?"":" live");e.firstChild.textContent=S.fake?"Simulated mission":"Live data";$("#stampSub").textContent=S.fake?"not from your hardware":S.src}
-function goLive(src){S.fake=false;S.src=src;clearInterval(S.iv);S.devs=S.devs.filter(d=>!d.sim);S.cur=S.devs[0]||null;$("#story").style.display=$("#navStory").style.display="none";stamp();$("#fleetSub").textContent="Real units only. Add one to get its key.";tags()}
-function setUser(u,role){S.user=u;S.role=role;$("#userBtn").textContent=u+" · "+role;["addPerson","addStation","routeBtn","rotate"].forEach(i=>$("#"+i).disabled=!can());$("#authM").classList.remove("open")}
-function demo(role){S.fake=true;S.paused=false;$("#story").style.display=$("#navStory").style.display="";setUser(role==="owner"?"demo":"judge",role==="owner"?"owner":"viewer");stamp();S.cur=null;simSeek(14);simLoop()}
-async function auth(kind){try{const j=await api("/api/"+kind,{method:"POST",body:JSON.stringify({user:$("#au").value,pass:$("#ap").value})});S.token=j.token;S.devs=[];setUser(j.user,j.role==="admin"?"owner":"member");goLive("relay · SIM800L");await pull();S.iv=setInterval(pull,3000)}catch(e){$("#authErr").textContent=/fetch|JSON|Unexpected/.test(e.message)?"No relay here. Use a demo role, or open this page from your relay server.":e.message}}
+function stamp(){const e=$("#stamp");e.className="stamp"+(S.fake?"":" live");e.firstChild.textContent=S.fake?"Simulated data":"Live data";$("#stampSub").textContent=S.fake?"not from your hardware":S.src}
+function goLive(src){S.fake=false;S.src=src;clearInterval(S.iv);S.devs=S.devs.filter(d=>!d.sim);S.cur=S.devs[0]||null;stamp();$("#fleetSub").textContent="Real units only. Add one to get its key.";tags()}
+function setUser(u,role){S.user=u;S.role=role;$("#userBtn").textContent=u+" · "+role;["addPerson","addStation","routeBtn","rotate","rescueBtn","keyBtn"].forEach(i=>$("#"+i).disabled=!can());if(role==="rescuer"){["addPerson","addStation","routeBtn","rotate","rescueBtn","keyBtn","share"].forEach(i=>$("#"+i).style.display="none");$("#hw").style.display="none";document.querySelector('aside a[href="#hw"]').style.display="none";$("#twin").style.paddingTop=""}$("#authM").classList.remove("open")}
+function demo(role){S.fake=true;S.paused=false;setUser(role==="owner"?"demo":"judge",role==="owner"?"owner":"viewer");stamp();S.cur=null;simSeek(14);simLoop()}
+async function auth(kind){try{const j=await api("/api/"+kind,{method:"POST",body:JSON.stringify({user:$("#au").value,pass:$("#ap").value})});S.token=j.token;S.devs=[];setUser(j.user,roleLabel(j.role));goLive("relay · SIM800L");await pull();S.iv=setInterval(pull,3000)}catch(e){$("#authErr").textContent=/fetch|JSON|Unexpected/.test(e.message)?"No relay here. Use a demo role, or open this page from your relay server.":e.message}}
 
 /* ---------- USB ---------- */
 async function usb(){if(!navigator.serial){alert("USB needs Chrome or Edge, and this page opened from your relay or localhost.");return}
@@ -258,29 +293,24 @@ $("#rLast").onclick=()=>{const r=S.cur.rows.filter(x=>fin(x.lat)&&fin(x.lon)).sl
 async function saveRoute(pts){const d=S.cur;if(S.token)await api("/api/devices/"+d.id+"/route",{method:"POST",body:JSON.stringify({points:pts,corridor:+$("#corr").value})});d.route=pts.length>1?pts:null;if(!S.token){reassess(d,true)}else await pull();$("#routeM").classList.remove("open");render()}
 $("#rSave").onclick=()=>{const pts=$("#routeTxt").value.split("\n").map(l=>l.split(",").map(Number)).filter(p=>p.length===2&&p.every(fin));saveRoute(pts)};$("#rClear").onclick=()=>saveRoute([]);
 
-$("#simPlay").onclick=()=>{if(S.sim.min>=Twin.sim.END_MIN){simSeek(0);S.paused=false}else S.paused=!S.paused;simUi()};$("#simRestart").onclick=()=>{S.paused=false;simSeek(0)};
-$("#simBar").oninput=e=>{S.paused=true;simSeek(+e.target.value)};
-document.querySelectorAll("#speeds button").forEach(b=>b.onclick=()=>{S.speed=+b.dataset.s;simLoop();simUi()});
-document.querySelectorAll("#story [data-j]").forEach(b=>b.onclick=()=>{S.paused=true;simSeek(+b.dataset.j)});
-document.querySelectorAll("#inj button").forEach(b=>b.onclick=()=>{if(!S.cur)return;S.cur.inj[b.dataset.i]=!S.cur.inj[b.dataset.i];S.paused=false;simUi()});
 const csvSave=(n,data,type)=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([data],{type}));a.download=n;a.click()};
 $("#csv").onclick=()=>{if(!S.cur)return;const r=S.cur.rows,k=[...new Set(r.flatMap(x=>Object.keys(x)))];csvSave("omnikit.csv",[k.join(","),...r.map(x=>k.map(y=>x[y]).join(","))].join("\n"),"text/csv")};$("#json").onclick=()=>S.cur&&csvSave("omnikit.json",JSON.stringify(S.cur.rows,null,1),"application/json");$("#print").onclick=()=>print();
 ["ESP32 prints one JSON line per cycle over USB","I²C scan finds the LCD, BME280 and MPU-6050","GPS fix shows lat, lon and alt (the relay needs alt)","Hold BOOT 3 s: LCD says SOS SENT and a red banner appears here","Shake the unit, then hold it still 15 s: FALL SUSPECTED","SIM800L registers, CSQ above 10","Unplug the SIM antenna: queued packets arrive late with correct times"].forEach((t,i)=>{const l=document.createElement("label");l.className="ck";l.innerHTML=`<input type="checkbox" id="ck${i}"> ${t}`;$("#ckl").append(l);try{$("#ck"+i).checked=localStorage.getItem("ck"+i)==="1"}catch{}$("#ck"+i).onchange=e=>{try{localStorage.setItem("ck"+i,e.target.checked?"1":"0")}catch{}}});
-const togglePause=()=>{if(S.fake){S.paused=!S.paused;simUi()}},mute=()=>{S.silenced=!S.silenced};
-[["Rescue brief",openBrief],["Pause or resume mission",togglePause],["Restart mission",()=>$("#simRestart").click()],["Silence siren",mute],["Connect over USB",usb],["Sign in or out",()=>$("#userBtn").click()],["Print report",()=>print()],["Jump to Connect hardware",()=>location.hash="hw"]].forEach(([n,f])=>{const b=document.createElement("button");b.textContent=n;b.onclick=()=>{$("#cmdM").classList.remove("open");f()};$("#cmdList").append(b)});
+const mute=()=>{S.silenced=!S.silenced};
+[["Rescue brief",openBrief],["Silence siren",mute],["Connect over USB",usb],["Sign in or out",()=>$("#userBtn").click()],["Print report",()=>print()],["Jump to Connect hardware",()=>location.hash="hw"]].forEach(([n,f])=>{const b=document.createElement("button");b.textContent=n;b.onclick=()=>{$("#cmdM").classList.remove("open");f()};$("#cmdList").append(b)});
 $("#cmdBtn").onclick=()=>$("#cmdM").classList.add("open");document.querySelectorAll(".modal").forEach(m=>m.onclick=e=>{if(e.target===m)m.classList.remove("open")});
-addEventListener("keydown",e=>{if(e.target.matches("input,textarea"))return;if(e.key==="Escape")document.querySelectorAll(".modal").forEach(m=>m.classList.remove("open"));if((e.ctrlKey||e.metaKey)&&e.key==="k"){e.preventDefault();$("#cmdM").classList.add("open")}if(!e.ctrlKey&&!e.metaKey){const k=e.key.toLowerCase();if(e.key===" "&&S.fake){e.preventDefault();togglePause()}if(k==="b")openBrief();if(k==="m")mute()}});
+addEventListener("keydown",e=>{if(e.target.matches("input,textarea"))return;if(e.key==="Escape")document.querySelectorAll(".modal").forEach(m=>m.classList.remove("open"));if((e.ctrlKey||e.metaKey)&&e.key==="k"){e.preventDefault();$("#cmdM").classList.add("open")}if(!e.ctrlKey&&!e.metaKey){const k=e.key.toLowerCase();if(k==="b")openBrief();if(k==="m")mute()}});
 
 /* ---------- read-only share link ---------- */
 async function shareMode(){const id=location.pathname.slice(3).replace(/\/+$/,""),load=async()=>{const r=await fetch("/api/public/"+encodeURIComponent(id)),j=await r.json();if(!r.ok)throw new Error(j.error);return j};
 try{const j=await load(),d=mk("share",j.name,j.kind);S.devs=[d];S.cur=d;setUser("guest","viewer");$("#userBtn").textContent="Read-only link";$("#userBtn").onclick=()=>location.href="/login";goLive("shared link · read-only");$("#fleetSub").textContent="A shared, read-only view of one unit.";
-$("#story").style.display=$("#navStory").style.display="none";$("#hw").style.display="none";
+$("#hw").style.display="none";
 const feed=j=>{j.rows.forEach(r=>{if(!d.seen.has(r.ts)){d.seen.add(r.ts);addRow(d,r)}});d.rows.sort((a,b)=>a.ts-b.ts);d.name=j.name;d.route=j.route;d.risk=j.risk;d.events=j.events;S.cur=d;render()};feed(j);S.iv=setInterval(async()=>{try{feed(await load())}catch{}},3000)}
 catch{$("#stamp").className="stamp";$("#stamp").textContent="This share link is not valid, or the owner reset it."}}
 
 (async()=>{if(location.pathname.startsWith("/s/")){await shareMode();return}let relay=false;try{relay=(await fetch("/api/health")).ok}catch{}
 if(relay&&!/demo/.test(location.search)){let tk=null,u="",ro="";try{tk=localStorage.getItem("omnikit_token");u=localStorage.getItem("omnikit_user");ro=localStorage.getItem("omnikit_role")}catch{}
-if(tk){S.token=tk;try{await api("/api/devices");setUser(u,ro==="admin"?"owner":"member");$("#userBtn").textContent+=" · sign out";goLive("relay · SIM800L");await pull();S.iv=setInterval(pull,3000);return}catch{try{localStorage.removeItem("omnikit_token")}catch{}}}
+if(tk){S.token=tk;try{await api("/api/devices");setUser(u,roleLabel(ro));$("#userBtn").textContent+=" · sign out";goLive("relay · SIM800L");await pull();S.iv=setInterval(pull,3000);return}catch{try{localStorage.removeItem("omnikit_token")}catch{}}}
 location.replace("/login");return}
 demo("owner")})();
 </script></body></html>

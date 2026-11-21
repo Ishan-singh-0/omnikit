@@ -164,3 +164,148 @@ test('relay: ingest, store-and-forward timestamps, SOS webhook, share link', asy
     assert.equal(other.length, 0);
   } finally { srv.kill(); mock.close() }
 });
+
+test('judge demo profile: "user 1" / "user" opens a realistic incident', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omnikit-seed-')), port = 19000 + Math.floor(Math.random() * 900);
+  const srv = spawn(process.execPath, [path.join(__dirname, 'server.js')], { env: { ...process.env, PORT: port, DATA_FILE: path.join(dir, 'data.json'), SEED_DEMO: '1', DEMO: '' }, stdio: 'ignore' });
+  try {
+    for (let i = 0; i < 40; i++) { try { if ((await req(port, 'GET', '/api/health')).s === 200) break } catch {} await wait(100) }
+    assert.equal((await req(port, 'GET', '/api/health')).j.demo, true);
+    const bad = await req(port, 'POST', '/api/login', { user: 'user 1', pass: 'nope' });
+    assert.equal(bad.s, 401);
+    const r = await req(port, 'POST', '/api/login', { user: 'User 1', pass: 'user' });
+    assert.equal(r.s, 200); assert.equal(r.j.user, 'user1');
+    const list = (await req(port, 'GET', '/api/devices', null, { authorization: 'Bearer ' + r.j.token })).j;
+    const by = n => list.find(d => d.name.startsWith(n));
+    assert.equal(list.length, 4);
+    assert.equal(by('Trekker 1').risk.level, 'critical');
+    assert.ok(by('Trekker 1').events.some(e => e.id === 'sos') && by('Trekker 1').events.some(e => e.id === 'storm') && by('Trekker 1').events.some(e => e.id === 'route'), 'whole incident is in the timeline');
+    assert.notEqual(by('Trekker 2').risk.level, 'critical');
+    assert.ok(by('Base camp').risk.factors.every(f => f.id !== 'still'), 'a station is never inactive');
+    assert.equal(by('Live node').rows.length, 0, 'the judges\' own ESP32 slot starts empty');
+    // the judges' ESP32 can use the printed key
+    assert.equal((await req(port, 'POST', '/ingest?key=demo-live-node', { t: 21, h: 50, p: 900, flags: 0 })).s, 200);
+    // a new registration still becomes admin-less member when no admin exists? first real account is admin
+    const reg = await req(port, 'POST', '/api/register', { user: 'organiser', pass: 'secret1' });
+    assert.equal(reg.j.role, 'admin');
+    const adminList = (await req(port, 'GET', '/api/devices', null, { authorization: 'Bearer ' + reg.j.token })).j;
+    assert.equal(adminList.length, 0, 'the admin account stays blank: it does not see the demo profile');
+  } finally { srv.kill() }
+});
+
+test('rescue team profile: board, respond, and privacy', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omnikit-resc-')), port = 19900 + Math.floor(Math.random() * 90);
+  const srv = spawn(process.execPath, [path.join(__dirname, 'server.js')], { env: { ...process.env, PORT: port, DATA_FILE: path.join(dir, 'data.json'), SEED_DEMO: '1', RESCUER_CODE: 'open-sesame', DEMO: '' }, stdio: 'ignore' });
+  try {
+    for (let i = 0; i < 40; i++) { try { if ((await req(port, 'GET', '/api/health')).s === 200) break } catch {} await wait(100) }
+    const login = async (u, p) => { const r = await req(port, 'POST', '/api/login', { user: u, pass: p }); assert.equal(r.s, 200, u); return { role: r.j.role, h: { authorization: 'Bearer ' + r.j.token } } };
+    const res = await login('rescuer 1', 'rescue'), hiker = await login('user 1', 'user');
+    assert.equal(res.role, 'rescuer');
+    const board = (await req(port, 'GET', '/api/devices', null, res.h)).j;
+    assert.equal(board.length, 4, 'the rescue team sees the shared demo units');
+    const asha = board.find(d => d.name.startsWith('Trekker 1'));
+    assert.equal(asha.incident.status, 'new', 'a critical unit opens an incident');
+
+    assert.equal((await req(port, 'POST', '/api/devices/' + asha.id + '/respond', { action: 'ack', text: 'Team Alpha rolling' }, hiker.h)).s, 404, 'a hiker cannot answer alerts');
+    assert.equal((await req(port, 'POST', '/api/devices/' + asha.id + '/respond', { action: 'nonsense' }, res.h)).s, 400);
+    const ack = await req(port, 'POST', '/api/devices/' + asha.id + '/respond', { action: 'ack', text: 'Team Alpha, 4 people' }, res.h);
+    assert.equal(ack.j.incident.status, 'ack'); assert.equal(ack.j.incident.by, 'rescuer1');
+    await req(port, 'POST', '/api/devices/' + asha.id + '/respond', { action: 'dispatch' }, res.h);
+    const mine = (await req(port, 'GET', '/api/devices', null, hiker.h)).j.find(d => d.id === asha.id);
+    assert.equal(mine.incident.status, 'dispatched', 'the hiker side sees that help is on the way');
+    assert.ok(mine.incident.log.some(e => /Team Alpha, 4 people/.test(e.text)));
+
+    // privacy: a normal user's device is invisible to rescuers until its owner shares it
+    const inv = await req(port, 'POST', '/api/register', { user: 'someone', pass: 'secret1' });
+    const own = { authorization: 'Bearer ' + inv.j.token };
+    const dev = await req(port, 'POST', '/api/devices', { name: 'Private' }, own);
+    await req(port, 'POST', '/ingest?key=' + dev.j.key, { t: 20, h: 50, p: 900, flags: 0 });
+    assert.ok(!(await req(port, 'GET', '/api/devices', null, res.h)).j.some(d => d.name === 'Private'));
+    assert.equal((await req(port, 'POST', '/api/devices/' + dev.j.id + '/rescue', { on: true }, own)).s, 200);
+    assert.ok((await req(port, 'GET', '/api/devices', null, res.h)).j.some(d => d.name === 'Private'), 'visible once shared');
+
+    // an invite code makes a rescuer; a wrong one does not
+    const good = await req(port, 'POST', '/api/register', { user: 'medic', pass: 'secret1', invite: 'open-sesame' });
+    assert.equal(good.j.role, 'rescuer');
+    const bad = await req(port, 'POST', '/api/register', { user: 'impostor', pass: 'secret1', invite: 'nope' });
+    assert.equal(bad.j.role, 'member');
+  } finally { srv.kill() }
+});
+
+test('battery: low charge warns, and a silent unit with a flat battery is called out', () => {
+  const rows = []; for (let i = 0; i <= 12; i++) rows.push({ ts: T0 + i * MIN, t: 18, h: 50, p: 900, bat: 22 - i, flags: 0 });
+  const a = T.assess(rows, { now: rows[12].ts });
+  assert.ok(has(a, 'battery'), 'warns at 20 % or below');
+  assert.ok(!has(T.assess([{ ts: T0, t: 18, h: 50, p: 900, bat: 80, flags: 0 }], { now: T0 }), 'battery'));
+  const silent = T.assess(rows, { now: rows[12].ts + 20 * MIN });
+  const f = silent.factors.find(x => x.id === 'silent');
+  assert.match(f.label, /battery death/i, 'flat battery is not blamed on a dead zone');
+  assert.match(T.brief('x', silent), /Battery: 10 %/);
+});
+
+function signed(port, id, key, body, n) {
+  const crypto = require('crypto');
+  const prefix = JSON.stringify(body).slice(0, -1) + ',"n":' + n;
+  const text = prefix + ',"sig":"' + crypto.createHmac('sha256', key).update(prefix).digest('hex') + '"}';
+  return new Promise((res, rej) => {
+    const r = http.request({ port, method: 'POST', path: '/ingest?id=' + id, headers: { 'content-type': 'application/json' } }, resp => { let b = ''; resp.on('data', d => b += d); resp.on('end', () => res({ s: resp.statusCode, b })) });
+    r.on('error', rej); r.end(text);
+  });
+}
+
+test('signed packets: valid, tampered, replayed, and no downgrade', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omnikit-sig-')), port = 19500 + Math.floor(Math.random() * 90);
+  const srv = spawn(process.execPath, [path.join(__dirname, 'server.js')], { env: { ...process.env, PORT: port, DATA_FILE: path.join(dir, 'data.json'), DEMO: '' }, stdio: 'ignore' });
+  try {
+    for (let i = 0; i < 40; i++) { try { if ((await req(port, 'GET', '/api/health')).s === 200) break } catch {} await wait(100) }
+    const reg = await req(port, 'POST', '/api/register', { user: 'signer', pass: 'secret1' }), auth = { authorization: 'Bearer ' + reg.j.token };
+    const dev = (await req(port, 'POST', '/api/devices', { name: 'Signed' }, auth)).j;
+    const pkt = { t: 20, h: 50, p: 900, bat: 77, flags: 0 };
+
+    // legacy still works until the first signed packet
+    assert.equal((await req(port, 'POST', '/ingest?key=' + dev.key, pkt)).s, 200);
+    assert.equal((await signed(port, dev.id, dev.key, pkt, 1000)).s, 200, 'valid signature accepted');
+    assert.equal((await req(port, 'POST', '/ingest?key=' + dev.key, pkt)).s, 401, 'legacy refused once the device signs (no downgrade)');
+    assert.equal((await signed(port, dev.id, dev.key, pkt, 1000)).s, 409, 'same counter = replay');
+    assert.equal((await signed(port, dev.id, dev.key, pkt, 999)).s, 409, 'older counter = replay');
+    assert.equal((await signed(port, dev.id, 'wrong-key', pkt, 1001)).s, 401, 'wrong key');
+    // tamper: change the value after signing
+    const crypto = require('crypto'), prefix = JSON.stringify(pkt).slice(0, -1) + ',"n":1002', sig = crypto.createHmac('sha256', dev.key).update(prefix).digest('hex');
+    const tampered = prefix.replace('"flags":0', '"flags":32') + ',"sig":"' + sig + '"}';
+    const t = await new Promise(res => { const r = http.request({ port, method: 'POST', path: '/ingest?id=' + dev.id }, resp => { resp.resume(); resp.on('end', () => res(resp.statusCode)) }); r.end(tampered) });
+    assert.equal(t, 401, 'a forged SOS is rejected');
+    assert.equal((await signed(port, dev.id, dev.key, { ...pkt, bat: 76 }, 1002)).s, 200, 'counter still moves forward');
+    const list = (await req(port, 'GET', '/api/devices', null, auth)).j;
+    assert.equal(list[0].signed, true); assert.equal(list[0].rows.at(-1).bat, 76);
+    assert.equal(list[0].risk.factors.some(f => f.id === 'sos'), false, 'the forged SOS never landed');
+
+    // rotating the key resets everything
+    const rot = (await req(port, 'POST', '/api/devices/' + dev.id + '/key', {}, auth)).j;
+    assert.notEqual(rot.key, dev.key);
+    assert.equal((await signed(port, dev.id, dev.key, pkt, 5000)).s, 401, 'the old key is dead');
+    assert.equal((await signed(port, dev.id, rot.key, pkt, 1)).s, 200, 'the new key starts a fresh counter');
+  } finally { srv.kill() }
+});
+
+test('rescuer outcomes become measured accuracy', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omnikit-out-')), port = 19700 + Math.floor(Math.random() * 90);
+  const srv = spawn(process.execPath, [path.join(__dirname, 'server.js')], { env: { ...process.env, PORT: port, DATA_FILE: path.join(dir, 'data.json'), SEED_DEMO: '1', DEMO: '' }, stdio: 'ignore' });
+  try {
+    for (let i = 0; i < 40; i++) { try { if ((await req(port, 'GET', '/api/health')).s === 200) break } catch {} await wait(100) }
+    const r = await req(port, 'POST', '/api/login', { user: 'rescuer 1', pass: 'rescue' }), h = { authorization: 'Bearer ' + r.j.token };
+    const hiker = await req(port, 'POST', '/api/login', { user: 'user 1', pass: 'user' });
+    assert.equal((await req(port, 'GET', '/api/stats', null, { authorization: 'Bearer ' + hiker.j.token })).s, 404, 'only the rescue team sees stats');
+    let s = (await req(port, 'GET', '/api/stats', null, h)).j;
+    assert.equal(s.resolved, 0); assert.equal(s.precision, null, 'nothing is pre-filled: the numbers are only what rescuers actually found');
+    const list = (await req(port, 'GET', '/api/devices', null, h)).j, asha = list.find(d => d.name.startsWith('Trekker 1')), ravi = list.find(d => d.name.startsWith('Trekker 2'));
+    assert.equal((await req(port, 'POST', '/api/devices/' + asha.id + '/respond', { action: 'resolve' }, h)).s, 400, 'resolving needs an outcome');
+    await req(port, 'POST', '/api/devices/' + asha.id + '/respond', { action: 'ack' }, h);
+    assert.equal((await req(port, 'POST', '/api/devices/' + asha.id + '/respond', { action: 'resolve', outcome: 'real', text: 'casualty evacuated' }, h)).j.incident.status, 'resolved');
+    await req(port, 'POST', '/api/devices/' + ravi.id + '/respond', { action: 'resolve', outcome: 'false' }, h);
+    await req(port, 'POST', '/api/devices/' + ravi.id + '/respond', { action: 'resolve', outcome: 'test' }, h);
+    s = (await req(port, 'GET', '/api/stats', null, h)).j;
+    assert.equal(s.resolved, 3); assert.equal(s.real, 1); assert.equal(s.false, 1); assert.equal(s.test, 1);
+    assert.equal(s.precision, 0.5, 'tests are excluded: 1 real / (1 real + 1 false)');
+    assert.ok(s.byTrigger.sos && s.byTrigger.sos.real === 1, 'accuracy is tracked per rule');
+  } finally { srv.kill() }
+});
