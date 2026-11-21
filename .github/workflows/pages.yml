@@ -23,7 +23,9 @@ jobs:
       - name: Assemble the static site
         run: |
           mkdir _site
-          cp index.html login.html twin.js _site/
+          cp login.html _site/index.html     # the sign-in page is the front door
+          cp index.html _site/app.html       # the dashboard, reached after sign-in
+          cp twin.js _site/
           touch _site/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:

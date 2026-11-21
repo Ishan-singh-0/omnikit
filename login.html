@@ -41,7 +41,7 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--saffron);outline-of
 <p class="hint" id="demoHint" hidden>Demo accounts for judges: <b>user 1</b> / <b>user</b> (a hiker) · <a href="#" id="fillDemo">fill it in</a><br><b>rescuer 1</b> / <b>rescue</b> (the rescue team) · <a href="#" id="fillRes">fill it in</a></p>
 <p class="hint" id="already" hidden>Already signed in as <b id="alreadyName"></b>. <a href="/app">Continue to the dashboard</a> or <a href="#" id="signOut">sign out</a>.</p>
 <p class="err" id="err" role="alert"></p><button class="go" id="go">Sign in</button>
-<div class="alt">The first account created on a fresh relay becomes the admin and sees every device.<br>No hardware yet? <a href="index.html?demo=1">Explore the demo</a></div></form></div>
+<div class="alt">The first account created on a fresh relay becomes the admin and sees every device.<br>No hardware yet? <a href="app.html?demo=1">Explore the demo</a></div></form></div>
 <script>
 const $=s=>document.querySelector(s);let mode="login";
 const K=k=>"omnikit_"+k;try{$("#u").value=localStorage.getItem(K("last"))||""}catch{}
@@ -53,7 +53,7 @@ function setMode(m){mode=m;const up=m==="register";$("#tIn").setAttribute("aria-
 $("#tIn").onclick=()=>setMode("login");$("#tUp").onclick=()=>setMode("register");
 $("#eye").onclick=()=>{const h=$("#p").type==="password";$("#p").type=h?"text":"password";$("#eye").textContent=h?"hide":"show"};
 $("#f").onsubmit=async e=>{e.preventDefault();const go=$("#go"),u=$("#u").value.trim(),p=$("#p").value;if(!u||!p){$("#err").textContent="Enter a username and password.";return}
-if(STATIC){const n=u.toLowerCase().replace(/\s+/g,""),ok={user1:["user","owner"],rescuer1:["rescue","rescuer"]}[n];if(!ok||ok[0]!==p){$("#err").textContent="Static demo accounts: user 1 / user, or rescuer 1 / rescue.";return}try{localStorage.setItem("omnikit_static",JSON.stringify({user:n,role:ok[1]}));if(ok[1]==="owner"){localStorage.removeItem("omnikit_static_inc");localStorage.removeItem("omnikit_static_out")}}catch{}location.replace("index.html");return}
+if(STATIC){const n=u.toLowerCase().replace(/\s+/g,""),ok={user1:["user","owner"],rescuer1:["rescue","rescuer"]}[n];if(!ok||ok[0]!==p){$("#err").textContent="Static demo accounts: user 1 / user, or rescuer 1 / rescue.";return}try{sessionStorage.setItem("omnikit_static",JSON.stringify({user:n,role:ok[1]}));if(ok[1]==="owner"){localStorage.removeItem("omnikit_static_inc");localStorage.removeItem("omnikit_static_out")}}catch{}location.replace("app.html");return}
 go.disabled=true;const t=go.textContent;go.textContent="Please wait…";$("#err").textContent="";
 try{const r=await fetch("/api/"+mode,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({user:u,pass:p,invite:mode==="register"?$("#inv").value:undefined})});const j=await r.json();if(!r.ok)throw new Error(j.error||"Something went wrong");
 localStorage.setItem(K("token"),j.token);localStorage.setItem(K("user"),j.user);localStorage.setItem(K("role"),j.role);localStorage.setItem(K("last"),j.user);location.replace("/app")}

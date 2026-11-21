@@ -61,7 +61,7 @@ const SENSORS = ['t', 'h', 'p', 'mq', 'tu', 'mic'];                             
 const OTHER = ['pitch', 'roll', 'lat', 'lon', 'alt', 'sats', 'flags', 'bat'];                // stored when sent
 const num = v => (typeof v === 'number' ? v : (v === undefined || v === null || v === '' ? NaN : Number(v)));
 const deviceByKey = k => k ? Object.keys(db.devices).find(i => same(db.devices[i].key, k)) : undefined;
-const PAGES = { '/': 'index.html', '/app': 'index.html', '/index.html': 'index.html', '/login': 'login.html', '/login.html': 'login.html' };
+const PAGES = { '/': 'login.html', '/app': 'index.html', '/app.html': 'index.html', '/index.html': 'index.html', '/login': 'login.html', '/login.html': 'login.html' };
 const STATIC = { '/twin.js': ['twin.js', 'application/javascript; charset=utf-8'] };
 
 // ---- twin: risk state, event log, alerts ------------------------------------

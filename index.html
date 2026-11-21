@@ -292,7 +292,7 @@ function openBrief(){const t=brief();$("#briefTxt").value=t;$("#bWa").href="http
 $("#briefBtn").onclick=$("#briefBtn2").onclick=$("#sosBrief").onclick=openBrief;$("#bClose").onclick=()=>$("#briefM").classList.remove("open");
 $("#bCopy").onclick=async()=>{try{await navigator.clipboard.writeText($("#briefTxt").value);$("#bCopy").textContent="Copied"}catch{$("#briefTxt").select()}setTimeout(()=>$("#bCopy").textContent="Copy",1500)};
 $("#sosAck").onclick=()=>{S.silenced=true};
-$("#usbBtn").onclick=usb;$("#userBtn").onclick=()=>{if(S.local){try{localStorage.removeItem("omnikit_static")}catch{}location.href="login.html";return}if(S.token){fetch("/api/logout",{method:"POST",keepalive:true,headers:{authorization:"Bearer "+S.token}}).catch(()=>{});try{["token","user","role"].forEach(k=>localStorage.removeItem("omnikit_"+k))}catch{}location.href="/login"}else $("#authM").classList.add("open")};
+$("#usbBtn").onclick=usb;$("#userBtn").onclick=()=>{if(S.local){try{sessionStorage.removeItem("omnikit_static")}catch{}location.href="./";return}if(S.token){fetch("/api/logout",{method:"POST",keepalive:true,headers:{authorization:"Bearer "+S.token}}).catch(()=>{});try{["token","user","role"].forEach(k=>localStorage.removeItem("omnikit_"+k))}catch{}location.href="/login"}else $("#authM").classList.add("open")};
 $("#closeAuth").onclick=()=>$("#authM").classList.remove("open");$("#doLogin").onclick=()=>auth("login");$("#doReg").onclick=()=>auth("register");$("#demoOwner").onclick=()=>demo("owner");$("#demoView").onclick=()=>demo("viewer");
 async function addDev(kind){const n=prompt(kind==="station"?"Station name":"Person or unit name");if(!n)return;let d;if(S.token){const j=await api("/api/devices",{method:"POST",body:JSON.stringify({name:n,kind})});d=mk(j.id,j.name,j.kind);d.key=j.key;d.share=j.share}else{d=mk("d"+Date.now(),n,kind);d.key="demo-"+Math.random().toString(16).slice(2,14)}S.devs.push(d);S.cur=d;render();const o=$("#keyOut");o.style.display="block";o.textContent="Device key for esp32_gateway.ino:\n"+d.key+(S.token?"":"\n(demo key, the real one comes from your relay)")}
 $("#addPerson").onclick=()=>addDev("person");$("#addStation").onclick=()=>addDev("station");
@@ -322,6 +322,6 @@ catch{$("#stamp").className="stamp";$("#stamp").textContent="This share link is 
 if(relay&&!/demo/.test(location.search)){let tk=null,u="",ro="";try{tk=localStorage.getItem("omnikit_token");u=localStorage.getItem("omnikit_user");ro=localStorage.getItem("omnikit_role")}catch{}
 if(tk){S.token=tk;try{await api("/api/devices");setUser(u,roleLabel(ro));$("#userBtn").textContent+=" · sign out";goLive("relay · SIM800L");await pull();S.iv=setInterval(pull,3000);return}catch{try{localStorage.removeItem("omnikit_token")}catch{}}}
 location.replace("/login");return}
-if(!relay){const st=lsGet("omnikit_static",null);if(!st){location.replace("login.html");return}demoLocal(st);return}
+if(!relay){let st=null;try{st=JSON.parse(sessionStorage.getItem("omnikit_static")||"null")}catch{}if(!st){location.replace("./");return}demoLocal(st);return}
 demo("owner")})();
 </script></body></html>

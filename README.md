@@ -97,9 +97,9 @@ Device keys: `demo-trekker-1`, `demo-trekker-2`, `demo-base-camp`, `demo-live-no
 
 ## The site, and how your hardware updates it
 
-Pages: `/` and `/app` dashboard (`/?demo=1` is the simulated mission) · `/login` · `/s/<id>` read-only share link.
+Pages: `/` and `/login` the **sign-in page (always the front door)** · `/app` the dashboard, reached after sign-in (`/app?demo=1` is the simulated demo) · `/login` · `/s/<id>` read-only share link.
 
-**GitHub Pages (static demo only):** the workflow in `.github/workflows/pages.yml` publishes the dashboard to `https://<your-username>.github.io/omnikit/`. It opens on the **sign-in page** and accepts the two demo accounts, **user 1 / user** (the hiker) and **rescuer 1 / rescue** (the rescue team). With no server, your browser plays the relay: the simulated incident, the rescuer board, acknowledge / dispatch / resolve and the measured-accuracy line all work, and a second tab signed in as the other role sees the response (state is shared through the browser, so sign in as the hiker first, which resets the demo). It has no real accounts and no hardware link, because GitHub cannot run the Node relay. In the repo go to *Settings → Pages → Source: GitHub Actions*, then push to `main`.
+**GitHub Pages (static demo only):** the workflow in `.github/workflows/pages.yml` publishes the site to `https://<your-username>.github.io/omnikit/`. The site root is the **sign-in page** and the dashboard is `app.html`. It accepts the two demo accounts, **user 1 / user** (the hiker) and **rescuer 1 / rescue** (the rescue team). With no server, your browser plays the relay: the simulated incident, the rescuer board, acknowledge / dispatch / resolve and the measured-accuracy line all work, and a second tab signed in as the other role sees the response (state is shared through the browser; the sign-in itself lasts only for that tab, so every new visit starts at the sign-in page, and signing in as the hiker resets the demo). It has no real accounts and no hardware link, because GitHub cannot run the Node relay. In the repo go to *Settings → Pages → Source: GitHub Actions*, then push to `main`.
 
 **1. Host it** (pick one):
 - **Laptop at the venue:** `node server.js`, then `./tunnel.sh` for a public plain-HTTP URL.
