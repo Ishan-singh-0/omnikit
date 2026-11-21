@@ -23,7 +23,7 @@ jobs:
       - name: Assemble the static site
         run: |
           mkdir _site
-          cp index.html twin.js _site/
+          cp index.html login.html twin.js _site/
           touch _site/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:
