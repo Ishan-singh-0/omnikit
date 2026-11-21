@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: omnikit
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATA_FILE
+        value: /data/data.json
+      # optional rescue alerts: set these in the Render dashboard
+      # - key: TELEGRAM_TOKEN
+      # - key: TELEGRAM_CHAT
+      # - key: ALERT_WEBHOOK
+    disk:
+      name: omnikit-data
+      mountPath: /data
+      sizeGB: 1

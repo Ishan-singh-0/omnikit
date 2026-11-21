@@ -1,0 +1,13 @@
+{
+  "name": "omnikit",
+  "version": "2.0.0",
+  "description": "OMNIKIT: an ESP32 survival node and a digital-twin risk engine for wilderness rescue",
+  "license": "MIT",
+  "private": true,
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.js",
+    "demo": "node server.js --demo",
+    "test": "node --test test.js"
+  }
+}

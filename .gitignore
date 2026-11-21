@@ -1,0 +1,12 @@
+data.json
+data.json.tmp
+.tunnel.log
+node_modules/
+_tools/
+_build/
+
+data*.json
+.tunnel.log
+
+~$*
+.~lock*

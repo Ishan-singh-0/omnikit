@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>OMNIKIT · wilderness survival digital twin</title>
+<meta name="description" content="An ESP32 survival node and a live digital twin that explains the risk and calls for help.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#12110f;--side:#0d0c0a;--panel:#1a1916;--line:#2c2a25;--ink:#ece8de;--mute:#a39e90;--saf:#e8a33d;--teal:#4fb3a2;--red:#e5483c;color-scheme:dark;box-sizing:border-box}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:inherit}.wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+nav{display:flex;align-items:center;gap:20px;padding:22px 0}nav b{font:800 26px "Playfair Display",Georgia,serif;margin-right:auto}nav a{color:var(--mute);text-decoration:none;font-size:14px}nav a:hover{color:var(--ink)}
+.btn{display:inline-block;padding:13px 22px;border-radius:10px;border:1px solid var(--line);background:var(--panel);font-weight:600;text-decoration:none;color:var(--ink)}.btn:hover{border-color:var(--saf)}.btn.pri{background:var(--saf);border-color:var(--saf);color:#1a1409}
+a:focus-visible,button:focus-visible{outline:2px solid var(--saf);outline-offset:2px}
+.hero{position:relative;padding:72px 0 64px;overflow:hidden}.hero canvas{position:absolute;inset:0;width:100%;height:100%;opacity:.9}.hero>*{position:relative}
+.eyebrow{font:500 12px "DM Mono",monospace;letter-spacing:.16em;color:var(--saf);text-transform:uppercase}
+h1{font:800 clamp(44px,7vw,84px)/1.03 "Playfair Display",Georgia,serif;letter-spacing:-.02em;margin:14px 0 20px;max-width:14ch}
+.lead{font-size:20px;color:var(--mute);max-width:56ch;margin:0 0 28px}.row{display:flex;gap:12px;flex-wrap:wrap}
+h2{font:700 34px/1.15 "Playfair Display",Georgia,serif;margin:0 0 8px}.sub{color:var(--mute);margin:0 0 28px;max-width:62ch}
+section{padding:56px 0;border-top:1px solid var(--line)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px}.card h3{margin:0 0 6px;font-size:17px}.card p{margin:0;color:var(--mute);font-size:15px}
+.n{font:500 12px "DM Mono",monospace;color:var(--saf);letter-spacing:.12em}
+pre{background:var(--side);border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow-x:auto;font:13px/1.7 "DM Mono",monospace;margin:12px 0 0;color:var(--ink)}
+code{font:13px "DM Mono",monospace;color:var(--saf)}
+.pill{display:inline-flex;gap:8px;align-items:center;font:12px "DM Mono",monospace;color:var(--mute);border:1px solid var(--line);border-radius:99px;padding:4px 12px;margin-bottom:6px}.pill i{width:8px;height:8px;border-radius:50%;background:var(--mute)}.pill.ok i{background:var(--teal)}
+ul.lim{margin:0;padding-left:20px;color:var(--mute)}ul.lim li{margin:6px 0}
+footer{padding:36px 0 56px;color:var(--mute);font-size:14px;border-top:1px solid var(--line)}
+@media(prefers-reduced-motion:reduce){*{animation:none!important}}
+</style></head><body>
+<div class="wrap"><nav><b>OMNIKIT</b><a href="#how">Connect hardware</a><a href="#what">What it does</a><a href="/app?demo=1">Live demo</a><a class="btn pri" id="signIn" href="/login">Sign in</a></nav>
+<header class="hero"><canvas id="trace" aria-hidden="true"></canvas>
+<span class="pill" id="status"><i></i><span id="statusTxt">checking the relay…</span></span>
+<div class="eyebrow">Wilderness survival &amp; rescue digital twin</div>
+<h1>Know where they are, and how they are.</h1>
+<p class="lead">A pocket ESP32 node decides on the device. This site turns its readings into a live risk score with a reason for every point, and sends a rescue brief when it matters.</p>
+<div class="row"><a class="btn pri" href="/app?demo=1">Open the live demo</a><a class="btn" id="mainCta" href="/login">Connect your hardware</a></div></header></div>
+
+<div class="wrap">
+<section id="how"><h2>Your hardware updates this site</h2><p class="sub">Three steps. The dashboard changes within seconds of the first packet.</p>
+<div class="grid">
+<div class="card"><div class="n">01</div><h3>Create a node</h3><p>Sign in, press <b>Add person node</b>, and copy its device key.</p></div>
+<div class="card"><div class="n">02</div><h3>Point the ESP32 here</h3><p>Flash <code>esp32_gateway.ino</code>, then open the Serial Monitor (115200) and type the three lines below. No reflash needed.</p></div>
+<div class="card"><div class="n">03</div><h3>Watch it live</h3><p>Position, weather trend, fall and SOS appear on the dashboard. A quiet unit is flagged by the relay itself.</p></div></div>
+<pre id="cmds">relay <span id="origin">https://this-site</span>
+key   YOUR_DEVICE_KEY
+wifi  MyHotspot MyPassword      (or leave it: the SIM800L takes over)</pre>
+<p class="sub" style="margin-top:14px">No hardware yet? The setup panel in the dashboard has a <b>Send test packet</b> button, and <code>node simulate-device.js</code> replays a whole trek into your account.</p></section>
+
+<section id="what"><h2>What it does</h2><p class="sub">Every warning is a plain rule with a source. Nothing is a black box.</p>
+<div class="grid">
+<div class="card"><h3>Fall and SOS on the device</h3><p>Impact then stillness, or a 3-second button hold. Decided on the ESP32, so it works with no network.</p></div>
+<div class="card"><h3>Climb vs storm</h3><p>GPS altitude corrects the barometer, so only real weather counts as a storm.</p></div>
+<div class="card"><h3>Explainable risk score</h3><p>0 to 100 from named rules: pressure, heat, cold, route, stillness, silence, air.</p></div>
+<div class="card"><h3>Dead-man’s switch</h3><p>No packet for 5 or 15 minutes raises a flag and keeps the last known position.</p></div>
+<div class="card"><h3>Rescue brief</h3><p>Who, where, why and a map link, sent to a webhook or Telegram on danger.</p></div>
+<div class="card"><h3>Honest timestamps</h3><p>Packets queued in a dead zone carry their age, so the history is true.</p></div></div></section>
+
+<section><h2>What it is not</h2>
+<ul class="lim"><li>A prototype and decision aid, not a diagnosis or a replacement for a map, compass or emergency beacon.</li><li>Fall thresholds are not yet validated outdoors; a dropped unit looks like a fall.</li><li>GPS needs open sky. The SIM800L is 2G only and is not satellite.</li><li>MQ-135 shows that the air changed, never which gas.</li></ul></section>
+<footer>OMNIKIT · <a href="/app?demo=1">Live demo</a> · <a href="/login">Sign in</a></footer></div>
+<script>
+const $=s=>document.querySelector(s);
+$("#origin").textContent=location.origin;
+try{if(localStorage.getItem("omnikit_token")){$("#signIn").textContent="Open dashboard";$("#signIn").href="/app";$("#mainCta").href="/app"}}catch{}
+fetch("/api/health").then(r=>{if(r.ok){$("#status").classList.add("ok");$("#statusTxt").textContent="relay online · ready for your device"}}).catch(()=>{$("#statusTxt").textContent="static preview · no relay here"});
+(()=>{const c=$("#trace"),x=c.getContext("2d");let w,h,t=0;const rs=()=>{w=c.width=c.offsetWidth*devicePixelRatio;h=c.height=c.offsetHeight*devicePixelRatio};rs();addEventListener("resize",rs);const still=matchMedia("(prefers-reduced-motion:reduce)").matches;
+const y=i=>h*.7+Math.sin(i*.01+t)*h*.05+Math.sin(i*.023+t*1.3)*h*.03;
+(function f(){x.clearRect(0,0,w,h);x.strokeStyle="rgba(236,232,222,.04)";x.lineWidth=1;for(let i=0;i<w;i+=56*devicePixelRatio){x.beginPath();x.moveTo(i,0);x.lineTo(i,h);x.stroke()}for(let j=0;j<h;j+=56*devicePixelRatio){x.beginPath();x.moveTo(0,j);x.lineTo(w,j);x.stroke()}
+const g=x.createLinearGradient(0,0,w,0);g.addColorStop(0,"rgba(232,163,61,0)");g.addColorStop(.7,"rgba(232,163,61,.8)");g.addColorStop(1,"#e8a33d");x.strokeStyle=g;x.lineWidth=2.5*devicePixelRatio;x.beginPath();for(let i=0;i<=w;i+=4){i?x.lineTo(i,y(i)):x.moveTo(i,y(i))}x.stroke();x.fillStyle="#e8a33d";x.beginPath();x.arc(w-2,y(w),5*devicePixelRatio,0,7);x.fill();if(!still)t+=.015;requestAnimationFrame(f)})()})();
+</script></body></html>

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sign in · OMNIKIT survival twin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#12110f;--side:#0d0c0a;--panel:#1a1916;--panel2:#211f1b;--line:#2c2a25;--ink:#ece8de;--mute:#8e897c;--saffron:#e8a33d;--clay:#d8574a;--teal:#4fb3a2;color-scheme:dark}
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}*,*::before,*::after{box-sizing:inherit}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);font:15px/1.55 Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(360px,.85fr)}
+.art{position:relative;overflow:hidden;background:var(--side);border-right:1px solid var(--line);padding:44px 52px;display:flex;flex-direction:column;justify-content:space-between;min-height:100vh}
+.art canvas{position:absolute;inset:0;width:100%;height:100%}
+.art>*{position:relative}
+.brand{font:800 30px "Playfair Display",Georgia,serif;letter-spacing:-.01em}
+h1{font:800 clamp(40px,5.4vw,76px)/1.02 "Playfair Display",Georgia,serif;letter-spacing:-.02em;margin:0;max-width:13ch}
+.lead{color:var(--mute);max-width:44ch;margin:18px 0 0}
+.chain{display:flex;flex-wrap:wrap;gap:8px;font:12px "DM Mono",monospace;color:var(--mute)}.chain span{border:1px solid var(--line);border-radius:99px;padding:4px 12px;background:rgba(13,12,10,.7)}
+.formside{display:grid;place-items:center;padding:32px 24px}
+.box{width:min(400px,100%)}
+.box h2{font:700 30px/1.15 "Playfair Display",Georgia,serif;margin:0 0 6px}.box p.s{color:var(--mute);margin:0 0 24px}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:4px;margin-bottom:22px}
+.seg button{background:none;border:0;color:var(--mute);font:500 14px Inter,sans-serif;padding:9px;border-radius:7px;cursor:pointer}.seg button[aria-selected=true]{background:var(--panel2);color:var(--ink);box-shadow:0 0 0 1px var(--line)}
+label{display:block;font:500 13px Inter,sans-serif;color:var(--mute);margin:14px 0 6px}
+.f{position:relative}input{width:100%;font:15px Inter,sans-serif;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:12px 14px}input:focus{outline:2px solid var(--saffron);outline-offset:1px;border-color:transparent}
+.eye{position:absolute;right:6px;top:6px;background:none;border:0;color:var(--mute);font:12px "DM Mono",monospace;padding:8px;cursor:pointer}
+.go{width:100%;margin-top:22px;font:600 15px Inter,sans-serif;background:var(--saffron);color:#1a1409;border:0;border-radius:10px;padding:13px;cursor:pointer}.go:hover{filter:brightness(1.07)}.go:disabled{opacity:.6;cursor:wait}
+.err{min-height:22px;color:var(--clay);font-size:13px;margin:12px 0 0}.hint{color:var(--mute);font-size:13px;margin-top:6px}
+.alt{margin-top:26px;padding-top:20px;border-top:1px solid var(--line);font-size:14px;color:var(--mute)}.alt a{color:var(--ink)}
+a:focus-visible,button:focus-visible{outline:2px solid var(--saffron);outline-offset:2px}
+@media(max-width:860px){body{grid-template-columns:1fr}.art{min-height:0;padding:28px 24px 36px;border-right:0;border-bottom:1px solid var(--line);gap:26px}h1{font-size:40px}}
+</style></head><body>
+<div class="art"><canvas id="trace" aria-hidden="true"></canvas><div class="brand">OMNIKIT</div>
+<div><h1>Know where they are, and how they are.</h1><p class="lead">Sign in to see every unit you own as a live digital twin: position, conditions, and a risk score you can explain.</p></div>
+<div class="chain"><span>sensors</span><span>ESP32</span><span>SIM800L</span><span>risk engine</span><span>rescue alert</span></div></div>
+<div class="formside"><form class="box" id="f" novalidate><h2 id="ttl">Welcome back</h2><p class="s" id="sub">Sign in with your OMNIKIT account.</p>
+<div class="seg" role="tablist"><button type="button" role="tab" id="tIn" aria-selected="true">Sign in</button><button type="button" role="tab" id="tUp" aria-selected="false">Create account</button></div>
+<label for="u">Username</label><input id="u" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+<label for="p">Password</label><div class="f"><input id="p" type="password" autocomplete="current-password" required><button type="button" class="eye" id="eye" aria-label="Show password">show</button></div>
+<p class="hint" id="rule" hidden>3 to 24 letters, numbers or underscores. Password 6 or more characters. The first account becomes the admin and sees every device.</p>
+<p class="err" id="err" role="alert"></p><button class="go" id="go">Sign in</button>
+<div class="alt">The first account created on a fresh relay becomes the admin and sees every device.<br>No hardware yet? <a href="/app?demo=1">Explore the demo</a></div></form></div>
+<script>
+const $=s=>document.querySelector(s);let mode="login";
+const K=k=>"omnikit_"+k;try{$("#u").value=localStorage.getItem(K("last"))||""}catch{}
+(async()=>{let t=null;try{t=localStorage.getItem(K("token"))}catch{}if(!t)return;try{const r=await fetch("/api/devices",{headers:{authorization:"Bearer "+t}});if(r.ok)location.replace("/app")}catch{}})();
+function setMode(m){mode=m;const up=m==="register";$("#tIn").setAttribute("aria-selected",!up);$("#tUp").setAttribute("aria-selected",up);$("#ttl").textContent=up?"Create your account":"Welcome back";$("#sub").textContent=up?"Takes ten seconds. You can add devices right after.":"Sign in with your OMNIKIT account.";$("#go").textContent=up?"Create account":"Sign in";$("#rule").hidden=!up;$("#p").autocomplete=up?"new-password":"current-password";$("#err").textContent=""}
+$("#tIn").onclick=()=>setMode("login");$("#tUp").onclick=()=>setMode("register");
+$("#eye").onclick=()=>{const h=$("#p").type==="password";$("#p").type=h?"text":"password";$("#eye").textContent=h?"hide":"show"};
+$("#f").onsubmit=async e=>{e.preventDefault();const go=$("#go"),u=$("#u").value.trim(),p=$("#p").value;if(!u||!p){$("#err").textContent="Enter a username and password.";return}
+go.disabled=true;const t=go.textContent;go.textContent="Please wait…";$("#err").textContent="";
+try{const r=await fetch("/api/"+mode,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({user:u,pass:p})});const j=await r.json();if(!r.ok)throw new Error(j.error||"Something went wrong");
+localStorage.setItem(K("token"),j.token);localStorage.setItem(K("user"),j.user);localStorage.setItem(K("role"),j.role);localStorage.setItem(K("last"),j.user);location.replace("/app")}
+catch(x){$("#err").textContent=/fetch|JSON|Unexpected|Load failed/.test(x.message)?"Can’t reach the OMNIKIT relay. Open this page from your relay server.":x.message==="taken"?"That username is taken.":x.message==="wrong login"?"Username or password is wrong.":x.message;go.disabled=false;go.textContent=t}};
+(()=>{const c=$("#trace"),x=c.getContext("2d");let w,h,t=0;const rs=()=>{w=c.width=c.offsetWidth*devicePixelRatio;h=c.height=c.offsetHeight*devicePixelRatio};rs();addEventListener("resize",rs);const still=matchMedia("(prefers-reduced-motion:reduce)").matches;
+function y(i){const k=i*.012+t;return h*.62+Math.sin(k)*h*.05+Math.sin(k*2.3+1)*h*.03+Math.sin(k*.41)*h*.06}
+(function f(){x.clearRect(0,0,w,h);x.strokeStyle="rgba(236,232,222,.05)";x.lineWidth=1;for(let i=0;i<w;i+=48*devicePixelRatio){x.beginPath();x.moveTo(i,0);x.lineTo(i,h);x.stroke()}for(let j=0;j<h;j+=48*devicePixelRatio){x.beginPath();x.moveTo(0,j);x.lineTo(w,j);x.stroke()}
+const g=x.createLinearGradient(0,0,w,0);g.addColorStop(0,"rgba(232,163,61,0)");g.addColorStop(.7,"rgba(232,163,61,.9)");g.addColorStop(1,"#e8a33d");x.strokeStyle=g;x.lineWidth=2.5*devicePixelRatio;x.beginPath();for(let i=0;i<=w;i+=4){i?x.lineTo(i,y(i)):x.moveTo(i,y(i))}x.stroke();
+x.fillStyle="#e8a33d";x.beginPath();x.arc(w-2,y(w),5*devicePixelRatio,0,7);x.fill();if(!still)t+=.02;requestAnimationFrame(f)})()})();
+</script></body></html>
