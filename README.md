@@ -99,6 +99,8 @@ Device keys: `demo-trekker-1`, `demo-trekker-2`, `demo-base-camp`, `demo-live-no
 
 Pages: `/` and `/app` dashboard (`/?demo=1` is the simulated mission) · `/login` · `/s/<id>` read-only share link.
 
+**GitHub Pages (static demo only):** the workflow in `.github/workflows/pages.yml` publishes the simulated dashboard to `https://<your-username>.github.io/omnikit/`. In the repo go to *Settings → Pages → Source: GitHub Actions*, then push to `main`. It has no accounts, rescue team or hardware link, because GitHub cannot run the Node relay. Use it as a link judges can open anywhere, and keep the relay (below) for the live parts.
+
 **1. Host it** (pick one):
 - **Laptop at the venue:** `node server.js`, then `./tunnel.sh` for a public plain-HTTP URL.
 - **Render:** push this folder to GitHub, New → Blueprint, pick the repo (`render.yaml` is included, with a 1 GB disk so accounts and history survive restarts). The site gets an `https://` URL.
